@@ -1,0 +1,118 @@
+package com.company.workflowbuilder.controller;
+
+import com.company.workflowbuilder.dto.request.*;
+import com.company.workflowbuilder.dto.response.*;
+import com.company.workflowbuilder.entity.runtime.TaskStatus;
+import com.company.workflowbuilder.service.WorkflowEngineService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.*;
+import org.springframework.web.bind.annotation.*;
+import java.util.*;
+
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api")
+public class InstanceController {
+    private final WorkflowEngineService engine;
+
+    @PostMapping("/instances")
+    public ResponseEntity<InstanceResponse> submit(@Valid @RequestBody CreateInstanceRequest r) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(engine.submit(r));
+    }
+
+    @PostMapping("/instances/batch")
+    public ResponseEntity<BatchInstanceResponse> submitBatch(@Valid @RequestBody CreateBatchInstanceRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(engine.submitBatch(request));
+    }
+
+    @GetMapping("/workflows/{workflowId}/request-draft")
+    public ResponseEntity<Map<String, Object>> requestDraft(@PathVariable UUID workflowId) {
+        return engine.requestDraft(workflowId).map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
+    @PutMapping("/workflows/{workflowId}/request-draft")
+    public Map<String, Object> saveRequestDraft(@PathVariable UUID workflowId,
+            @Valid @RequestBody CreateInstanceRequest request) {
+        return engine.saveRequestDraft(workflowId, request);
+    }
+
+    @DeleteMapping("/workflows/{workflowId}/request-draft")
+    public ResponseEntity<Void> deleteRequestDraft(@PathVariable UUID workflowId) {
+        engine.deleteRequestDraft(workflowId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/instances/mine")
+    public List<InstanceResponse> mine() {
+        return engine.mine();
+    }
+
+    @GetMapping("/instances")
+    public List<InstanceResponse> instances() {
+        return engine.accessibleInstances();
+    }
+
+    @GetMapping("/instances/{id}")
+    public InstanceResponse get(@PathVariable UUID id) {
+        return engine.get(id);
+    }
+
+    @GetMapping("/instances/{id}/history")
+    public List<InstanceHistoryResponse> history(@PathVariable UUID id) {
+        return engine.history(id);
+    }
+
+    @GetMapping("/instances/{id}/batch-records")
+    public Map<String, Object> batchRecords(@PathVariable UUID id,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "50") int size) {
+        return engine.batchRecords(id, page, size);
+    }
+
+    @PostMapping("/instances/{id}/approve")
+    public InstanceResponse approve(@PathVariable UUID id, @RequestBody(required = false) TaskActionRequest r) {
+        return engine.act(id, "APPROVE", r == null ? new TaskActionRequest() : r);
+    }
+
+    @PostMapping("/instances/{id}/reject")
+    public InstanceResponse reject(@PathVariable UUID id, @RequestBody(required = false) TaskActionRequest r) {
+        return engine.act(id, "REJECT", r == null ? new TaskActionRequest() : r);
+    }
+
+    @PostMapping("/instances/{id}/complete")
+    public InstanceResponse complete(@PathVariable UUID id, @RequestBody(required = false) TaskActionRequest r) {
+        return engine.act(id, "COMPLETE", r == null ? new TaskActionRequest() : r);
+    }
+
+    @PostMapping("/instances/{id}/re-evaluate")
+    public InstanceResponse reEvaluate(@PathVariable UUID id) {
+        return engine.reEvaluate(id);
+    }
+
+    @PostMapping("/instances/{id}/cancel")
+    public InstanceResponse cancel(@PathVariable UUID id) {
+        return engine.cancel(id);
+    }
+
+    @PostMapping("/instances/{id}/withdraw")
+    public InstanceResponse withdraw(@PathVariable UUID id, @RequestBody TaskActionRequest request) {
+        return engine.withdraw(id, request);
+    }
+
+    @PostMapping("/tasks/{taskId}/{action}")
+    public InstanceResponse actTask(@PathVariable UUID taskId, @PathVariable String action,
+            @RequestBody(required = false) TaskActionRequest request) {
+        return engine.actTask(taskId, action, request == null ? new TaskActionRequest() : request);
+    }
+
+    @GetMapping("/my-tasks")
+    public List<TaskResponse> tasks(@RequestParam(defaultValue = "PENDING") TaskStatus status) {
+        return engine.myTasks(status);
+    }
+
+    @GetMapping("/my-tasks/{taskId}")
+    public TaskResponse task(@PathVariable UUID taskId) {
+        return engine.myTask(taskId);
+    }
+}

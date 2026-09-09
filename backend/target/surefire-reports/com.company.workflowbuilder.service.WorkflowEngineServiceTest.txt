@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.company.workflowbuilder.service.WorkflowEngineServiceTest
+-------------------------------------------------------------------------------
+Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.257 s -- in com.company.workflowbuilder.service.WorkflowEngineServiceTest

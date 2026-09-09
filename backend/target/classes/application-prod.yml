@@ -1,0 +1,10 @@
+spring:
+  datasource:
+    password: ${DB_PASSWORD}
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+  password-reset:
+    expose-development-link: false
+

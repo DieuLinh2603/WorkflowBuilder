@@ -1,0 +1,3 @@
+package com.company.workflowbuilder.repository;
+import com.company.workflowbuilder.entity.runtime.WorkflowBatchRecord;import org.springframework.data.jpa.repository.JpaRepository;import java.util.*;
+public interface WorkflowBatchRecordRepository extends JpaRepository<WorkflowBatchRecord,UUID>{List<WorkflowBatchRecord>findByInstanceIdOrderByRowNumberAscRevisionDesc(UUID instanceId);long countByInstanceId(UUID instanceId);Optional<WorkflowBatchRecord>findFirstByInstanceIdAndRowNumberOrderByRevisionDesc(UUID instanceId,int rowNumber);Optional<WorkflowBatchRecord>findFirstByInstanceWorkflowIdAndBusinessKeyOrderByRevisionDescUpdatedAtDesc(UUID workflowId,String businessKey);}

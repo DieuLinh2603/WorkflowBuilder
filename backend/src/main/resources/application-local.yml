@@ -1,0 +1,12 @@
+spring:
+  datasource:
+    password: ${DB_PASSWORD:123456789}
+  flyway:
+    locations: classpath:db/migration,classpath:db/devdata
+
+app:
+  jwt:
+    # Local-only default. Staging and production must provide JWT_SECRET.
+    secret: ${JWT_SECRET:workflow-builder-local-secret-key-must-be-at-least-256-bits}
+  password-reset:
+    expose-development-link: ${EXPOSE_PASSWORD_RESET_LINK:true}

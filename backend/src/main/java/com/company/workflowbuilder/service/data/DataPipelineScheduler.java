@@ -1,0 +1,5 @@
+package com.company.workflowbuilder.service.data;
+import com.company.workflowbuilder.entity.data.*; import com.company.workflowbuilder.repository.*; import lombok.RequiredArgsConstructor; import net.javacrumbs.shedlock.spring.annotation.SchedulerLock; import org.springframework.scheduling.annotation.Scheduled; import org.springframework.stereotype.Service; import java.time.LocalDateTime; import java.util.*;
+@Service @RequiredArgsConstructor public class DataPipelineScheduler { private final DataPipelineRepository pipelines;private final PipelineRunRepository runs;private final DataPipelineService service;
+ @Scheduled(fixedDelay=60000) @SchedulerLock(name="dataPipelineScheduler",lockAtMostFor="PT55S",lockAtLeastFor="PT1S") public void tick(){LocalDateTime now=LocalDateTime.now();for(DataPipeline p:pipelines.findByStatusAndNextRunAtLessThanEqual("PUBLISHED",now)){PipelineRun r=service.enqueueScheduled(p,p.getNextRunAt());if(r!=null)service.executeRun(r);}for(PipelineRun r:runs.findByStatusInAndNextAttemptAtLessThanEqual(List.of("QUEUED","RETRY"),now))service.executeRun(r);}
+}
