@@ -18,7 +18,13 @@ public class WorkflowResponse {
     private String name;
     private String description;
     private String type;
+    private String typeName;
     private String module;
+    private String moduleName;
+    @Builder.Default
+    private List<String> recommendedStepTypes = List.of();
+    @Builder.Default
+    private List<String> typeChecklist = List.of();
     private UUID ownerId;
     private String ownerName;
     private String ownerAvatarInitials;

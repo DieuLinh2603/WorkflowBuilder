@@ -12,22 +12,36 @@ import com.company.workflowbuilder.entity.workflow.WorkflowStep;
 import com.company.workflowbuilder.entity.workflow.WorkflowStatus;
 import com.company.workflowbuilder.service.CurrentUserService;
 import com.company.workflowbuilder.service.WorkflowAuthorizationService;
+import com.company.workflowbuilder.service.WorkflowMetadataService;
+import com.company.workflowbuilder.dto.response.WorkflowTypeDefinitionResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.Comparator;
 
 @Component
-@RequiredArgsConstructor
+@RequiredArgsConstructor(onConstructor_ = @org.springframework.beans.factory.annotation.Autowired)
 public class WorkflowViewMapper {
     private final WorkflowAuthorizationService authorization;
     private final CurrentUserService currentUser;
+    private final WorkflowMetadataService metadata;
+
+    /** Kept for unit tests and integrations compiled against the pre-metadata mapper. */
+    public WorkflowViewMapper(WorkflowAuthorizationService authorization, CurrentUserService currentUser) {
+        this(authorization, currentUser, null);
+    }
 
     public WorkflowResponse workflow(Workflow value) {
         User owner = value.getOwner();
+        var module = metadata == null ? null : metadata.moduleByCode(value.getModule());
+        WorkflowTypeDefinitionResponse type = metadata == null ? null : metadata.typeByCode(value.getType());
         return WorkflowResponse.builder()
                 .id(value.getId()).name(value.getName()).description(value.getDescription())
-                .type(value.getType()).module(value.getModule())
+                .type(value.getType()).typeName(value.getCustomTypeName() == null || value.getCustomTypeName().isBlank()
+                        ? (type == null ? value.getType() : type.getName()) : value.getCustomTypeName())
+                .module(value.getModule()).moduleName(module == null ? value.getModule() : module.getName())
+                .recommendedStepTypes(type == null ? java.util.List.of() : type.getRecommendedStepTypes())
+                .typeChecklist(type == null ? java.util.List.of() : type.getChecklist())
                 .ownerId(owner.getId()).ownerName(owner.getDisplayName())
                 .ownerAvatarInitials(initials(owner.getDisplayName()))
                 .editors(value.getEditors().stream()

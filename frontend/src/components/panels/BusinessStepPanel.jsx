@@ -45,7 +45,7 @@ const ESCALATIONS = [
 
 const CONDITION_OPERATORS = {
   EQ: 'Bằng (=)', NEQ: 'Khác (≠)', GT: 'Lớn hơn (>)', GTE: 'Lớn hơn hoặc bằng (≥)',
-  LT: 'Nhỏ hơn (<)', LTE: 'Nhỏ hơn hoặc bằng (≤)', CONTAINS: 'Có chứa',
+  LT: 'Nhỏ hơn (<)', LTE: 'Nhỏ hơn hoặc bằng (≤)', CONTAINS: 'Có chứa', NOT_CONTAINS: 'Không chứa',
   IS_EMPTY: 'Đang trống', NOT_EMPTY: 'Không trống'
 };
 
@@ -53,6 +53,11 @@ const OPERATORS_BY_FIELD_TYPE = {
   TEXT: ['EQ', 'NEQ', 'CONTAINS', 'IS_EMPTY', 'NOT_EMPTY'],
   NUMBER: ['EQ', 'NEQ', 'GT', 'GTE', 'LT', 'LTE', 'IS_EMPTY', 'NOT_EMPTY'],
   DATE: ['EQ', 'NEQ', 'GT', 'GTE', 'LT', 'LTE', 'IS_EMPTY', 'NOT_EMPTY'],
+  DATETIME: ['EQ', 'NEQ', 'GT', 'GTE', 'LT', 'LTE', 'IS_EMPTY', 'NOT_EMPTY'],
+  SELECT: ['EQ', 'NEQ', 'IS_EMPTY', 'NOT_EMPTY'],
+  RADIO: ['EQ', 'NEQ', 'IS_EMPTY', 'NOT_EMPTY'],
+  MULTI_CHOICE: ['CONTAINS', 'NOT_CONTAINS', 'IS_EMPTY', 'NOT_EMPTY'],
+  USER_PICKER: ['EQ', 'NEQ', 'CONTAINS', 'NOT_CONTAINS', 'IS_EMPTY', 'NOT_EMPTY'],
   CHECKBOX: ['EQ', 'NEQ', 'IS_EMPTY', 'NOT_EMPTY'],
   FILE: ['IS_EMPTY', 'NOT_EMPTY']
 };
@@ -441,7 +446,8 @@ function AutoApprovalConditions({ conditions, fields, fieldsByKey, logicalOperat
           <div className="mt-2 flex gap-2">
             {noValue ? <div className="input-field flex-1 bg-slate-50 text-xs text-slate-400">Không cần nhập giá trị</div>
               : field?.type === 'CHECKBOX' ? <select value={condition.expectedValue ?? ''} onChange={event => onUpdate(index, 'expectedValue', event.target.value)} className="input-field flex-1 bg-white text-xs"><option value="">Chọn giá trị</option><option value="true">Có / Đúng</option><option value="false">Không / Sai</option></select>
-              : <input type={field?.type === 'NUMBER' ? 'number' : field?.type === 'DATE' ? 'date' : 'text'} value={condition.expectedValue ?? ''} onChange={event => onUpdate(index, 'expectedValue', event.target.value)} disabled={!field} className="input-field flex-1 text-xs" placeholder="Giá trị so sánh"/>}
+              : ['SELECT','RADIO','MULTI_CHOICE'].includes(field?.type) ? <select value={condition.expectedValue??''} onChange={event=>onUpdate(index,'expectedValue',event.target.value)} className="input-field flex-1 bg-white text-xs"><option value="">Chọn giá trị</option>{(field.options||[]).map(option=><option key={option.value} value={option.value}>{option.label}</option>)}</select>
+              : <input type={field?.type === 'NUMBER' ? 'number' : field?.type === 'DATE' ? 'date' : field?.type === 'DATETIME' ? 'datetime-local' : 'text'} value={condition.expectedValue ?? ''} onChange={event => onUpdate(index, 'expectedValue', event.target.value)} disabled={!field} className="input-field flex-1 text-xs" placeholder="Giá trị so sánh"/>}
             <button type="button" onClick={() => onRemove(index)} className="flex w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-500" title="Xóa điều kiện"><Trash2 size={15}/></button>
           </div>
         </div>;

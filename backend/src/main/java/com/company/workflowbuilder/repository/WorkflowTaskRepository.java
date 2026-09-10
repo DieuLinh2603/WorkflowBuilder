@@ -9,6 +9,7 @@ public interface WorkflowTaskRepository extends JpaRepository<WorkflowTask, UUID
     List<WorkflowTask> findByAssigneeIdAndStatusOrderByCreatedAtDesc(UUID userId, TaskStatus status);
     List<WorkflowTask> findByAssigneeIdOrderByCreatedAtDesc(UUID userId);
     boolean existsByInstanceIdAndAssigneeId(UUID instanceId, UUID assigneeId);
+    List<WorkflowTask> findByInstanceIdAndAssigneeId(UUID instanceId, UUID assigneeId);
 
     Optional<WorkflowTask> findByInstanceIdAndStepIdAndAssigneeIdAndStatus(UUID instanceId, UUID stepId,
             UUID assigneeId, TaskStatus status);

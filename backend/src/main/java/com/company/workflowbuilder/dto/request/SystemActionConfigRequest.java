@@ -8,7 +8,7 @@ import java.util.*;
 @Data
 public class SystemActionConfigRequest {
     public enum ActionType {
-        API_CALL, SEND_NOTIFICATION, UPDATE_DATA, CREATE_RECORD, UPDATE_STATUS
+        API_CALL, SEND_NOTIFICATION, UPDATE_DATA, CREATE_RECORD, UPDATE_STATUS, CALCULATE_OUTPUT
     }
 
     public enum FailurePolicy {
@@ -27,6 +27,7 @@ public class SystemActionConfigRequest {
     private String targetType = "REQUEST";
     private String recordType;
     private String newStatus;
+    private List<com.company.workflowbuilder.dto.CalculatedOutput> calculatedOutputs = new ArrayList<>();
     @Valid
     private List<Mapping> mappings = new ArrayList<>();
     @NotNull

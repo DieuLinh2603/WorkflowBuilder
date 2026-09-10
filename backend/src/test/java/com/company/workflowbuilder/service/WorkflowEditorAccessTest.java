@@ -50,6 +50,7 @@ class WorkflowEditorAccessTest {
     void ownerCanAssignAnActiveEditorToWorkflow() {
         User owner = user("owner@company.com", SystemRole.WORKFLOW_OWNER);
         User editor = user("editor@company.com", SystemRole.EDITOR);
+        editor.setManager(owner);
         Workflow workflow = workflow(owner, WorkflowStatus.DRAFT);
         when(workflows.findById(workflow.getId())).thenReturn(Optional.of(workflow));
         when(users.findById(editor.getId())).thenReturn(Optional.of(editor));
@@ -65,6 +66,7 @@ class WorkflowEditorAccessTest {
     void ownerCanAssignAnActiveViewerAsWorkflowScopedEditor() {
         User owner = user("owner@company.com", SystemRole.WORKFLOW_OWNER);
         User viewer = user("viewer@company.com", SystemRole.VIEWER);
+        viewer.setManager(owner);
         Workflow workflow = workflow(owner, WorkflowStatus.DRAFT);
         when(workflows.findById(workflow.getId())).thenReturn(Optional.of(workflow));
         when(users.findById(viewer.getId())).thenReturn(Optional.of(viewer));
@@ -126,6 +128,39 @@ class WorkflowEditorAccessTest {
         assertThrows(IllegalStateException.class, () -> service.addEditor(workflow.getId(), editor.getId()));
         assertThrows(IllegalStateException.class, () -> service.removeEditor(workflow.getId(), editor.getId()));
         verify(workflows, never()).save(any());
+    }
+
+    @Test
+    void rejectsEditorOutsideOwnerManagement() {
+        User owner = user("owner@company.com", SystemRole.WORKFLOW_OWNER);
+        User editor = user("editor@company.com", SystemRole.EDITOR);
+        Workflow workflow = workflow(owner, WorkflowStatus.DRAFT);
+        when(workflows.findById(workflow.getId())).thenReturn(Optional.of(workflow));
+        when(users.findById(editor.getId())).thenReturn(Optional.of(editor));
+        assertThrows(IllegalArgumentException.class, () -> service.addEditor(workflow.getId(), editor.getId()));
+        editor.setManager(user("another-owner@company.com", SystemRole.WORKFLOW_OWNER));
+        assertThrows(IllegalArgumentException.class, () -> service.addEditor(workflow.getId(), editor.getId()));
+        verify(workflows, never()).save(any());
+    }
+
+    @Test
+    void candidatesAreScopedToOwnerAndWorkflowModule() {
+        User owner = user("owner@company.com", SystemRole.WORKFLOW_OWNER);
+        Workflow workflow = workflow(owner, WorkflowStatus.DRAFT);
+        workflow.setModule("HR");
+        User eligible = user("eligible@company.com", SystemRole.VIEWER);
+        eligible.getModuleCodes().add("HR");
+        User wrongModule = user("other@company.com", SystemRole.EDITOR);
+        User assigned = user("assigned@company.com", SystemRole.EDITOR);
+        assigned.getModuleCodes().add("HR");
+        workflow.getEditors().add(assigned);
+        User wrongRole = user("owner2@company.com", SystemRole.WORKFLOW_OWNER);
+        when(workflows.findById(workflow.getId())).thenReturn(Optional.of(workflow));
+        when(users.findByActiveTrueAndManager_Id(owner.getId()))
+                .thenReturn(java.util.List.of(eligible, wrongModule, assigned, wrongRole));
+        assertEquals(java.util.List.of(eligible.getId()), service.editorCandidates(workflow.getId()).stream()
+                .map(com.company.workflowbuilder.dto.response.WorkflowEditorResponse::getId).toList());
+        verify(authorization).requireOwnerOrAdmin(workflow);
     }
 
     private User user(String email, SystemRole role) {

@@ -22,4 +22,10 @@ public interface WorkflowRepository extends JpaRepository<Workflow, UUID> {
     List<Workflow> findByFamilyIdAndStatus(UUID familyId, WorkflowStatus status);
 
     List<Workflow> findByFamilyId(UUID familyId);
+
+    boolean existsByModuleAndStatus(String module, WorkflowStatus status);
+
+    boolean existsByOwnerIdAndModuleAndStatusNotIn(UUID ownerId, String module, java.util.Collection<WorkflowStatus> statuses);
+
+    boolean existsByModuleAndVersionAndNameIgnoreCase(String module, String version, String name);
 }

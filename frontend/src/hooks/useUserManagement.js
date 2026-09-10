@@ -59,6 +59,7 @@ export default function useUserManagement() {
         jobTitle: userData.jobTitle?.trim() || null,
         managerId: userData.managerId || null,
         systemRoles: userData.systemRoles || [],
+        moduleCodes: userData.moduleCodes || [],
       }),
     });
     if (!res.ok) throw await userRequestError(res, "Không thể tạo User");
@@ -76,6 +77,7 @@ export default function useUserManagement() {
         jobTitle: userData.jobTitle?.trim() || null,
         managerId: userData.managerId || null,
         systemRoles: userData.systemRoles || [],
+        moduleCodes: userData.moduleCodes || [],
         newPassword: userData.newPassword || null,
       }),
     });

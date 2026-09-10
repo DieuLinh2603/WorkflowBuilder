@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Trash2, Zap } from 'lucide-react';
+import { Pencil, X, Trash2, Zap } from 'lucide-react';
 import { apiError, apiFetch } from '../../api';
 import useStartStepConfig from '../../hooks/useStartStepConfig';
 import AddFieldModal from './AddFieldModal';
@@ -13,7 +13,7 @@ const SYSTEM_ROLES = [
 ];
 
 export default function StartStepPanel({ workflowId, step, onClose }) {
-  const { config, error: configError, fetchConfig, updateConfig, addField, deleteField } = useStartStepConfig(workflowId, step?.id);
+  const { config, error: configError, fetchConfig, updateConfig, addField, updateField, deleteField } = useStartStepConfig(workflowId, step?.id);
   const [instruction, setInstruction] = useState('');
   const [requesterScope, setRequesterScope] = useState('ALL_EMPLOYEES');
   const [allowedUserIds, setAllowedUserIds] = useState([]);
@@ -28,6 +28,7 @@ export default function StartStepPanel({ workflowId, step, onClose }) {
   const [recordRecipientFieldKey, setRecordRecipientFieldKey] = useState('');
   const [maxBatchRows, setMaxBatchRows] = useState(500);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingField, setEditingField] = useState(null);
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -92,10 +93,12 @@ export default function StartStepPanel({ workflowId, step, onClose }) {
     ? current.filter(item => item !== role) : [...current, role]);
 
   const handleAddField = async (fieldData) => {
-    const success = await addField(fieldData);
+    const success = editingField ? await updateField(editingField.id, fieldData) : await addField(fieldData);
     if (success) {
       setIsModalOpen(false);
+      setEditingField(null);
     }
+    return success;
   };
 
   const handleDeleteField = async (fieldId) => {
@@ -153,6 +156,7 @@ export default function StartStepPanel({ workflowId, step, onClose }) {
                   <span className={`text-[10px] px-1.5 py-0.5 rounded ${field.required ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'}`}>
                     {field.required ? 'Bắt buộc' : 'Tùy chọn'}
                   </span>
+                  <button type="button" onClick={()=>{setEditingField(field);setIsModalOpen(true)}} className="flex items-center gap-1 rounded-md border border-orange-200 px-2 py-1 text-[10px] font-semibold text-orange-600 hover:bg-orange-50" title={`Chỉnh sửa ${field.label}`}><Pencil size={11}/>Chỉnh sửa</button>
                   <button onClick={() => handleDeleteField(field.id)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
                     <Trash2 size={14} />
                   </button>
@@ -161,7 +165,7 @@ export default function StartStepPanel({ workflowId, step, onClose }) {
             ))}
 
             <button 
-              onClick={() => setIsModalOpen(true)}
+              onClick={() => { setEditingField(null); setIsModalOpen(true); }}
               className="w-full py-2.5 border border-dashed border-orange-300 text-orange-500 font-medium text-sm rounded-lg hover:bg-orange-50 transition-colors flex items-center justify-center gap-2"
             >
               + Thêm field
@@ -171,7 +175,6 @@ export default function StartStepPanel({ workflowId, step, onClose }) {
 
         <div className="border-t border-grayBorder pt-5">
           <label className="block text-sm font-semibold text-gray-700">CHẾ ĐỘ NHẬP DỮ LIỆU</label>
-          <p className="mt-1 text-[10px] leading-4 text-gray-500">Form đơn tạo một hồ sơ. Danh sách CSV tạo một batch instance; từng dòng vẫn có condition, bước hiện tại và kết quả riêng, còn review được gom thành task theo nhóm.</p>
           <div className="mt-3 grid grid-cols-2 gap-2">
             {[['SINGLE', 'Form đơn'], ['BATCH', 'Danh sách CSV']].map(([value, label]) => <button key={value} type="button" onClick={() => setSubmissionMode(value)} className={`rounded-lg border px-3 py-3 text-xs font-semibold ${submissionMode === value ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-grayBorder text-gray-600'}`}>{label}</button>)}
           </div>
@@ -291,8 +294,9 @@ export default function StartStepPanel({ workflowId, step, onClose }) {
 
       <AddFieldModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => { setIsModalOpen(false); setEditingField(null); }}
         onSave={handleAddField}
+        editingField={editingField}
       />
     </div>
   );

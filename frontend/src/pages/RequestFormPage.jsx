@@ -11,6 +11,7 @@ export default function RequestFormPage() {
   const navigate = useNavigate();
   const [workflow, setWorkflow] = useState(null);
   const [fields, setFields] = useState([]);
+  const [users, setUsers] = useState([]);
   const [values, setValues] = useState({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -62,6 +63,8 @@ export default function RequestFormPage() {
       const configResponse = await apiFetch(`/api/workflows/${activeWorkflow.id}/steps/${start.id}/start-config`);
       if (!configResponse.ok) { setError(await apiError(configResponse, 'Không thể tải các trường của biểu mẫu')); setLoading(false); return; }
       const config = await configResponse.json();
+      const usersResponse = await apiFetch('/api/users/active', { toast: false });
+      if (usersResponse.ok) setUsers(await usersResponse.json());
       setWorkflow({ ...workflowData, instruction: config.instructionForCreator,
         submissionMode: config.submissionMode || 'SINGLE', maxBatchRows: config.maxBatchRows || 500 });
       setFields(config.fields || []);
@@ -194,7 +197,7 @@ export default function RequestFormPage() {
       const records = dataRows.map((row, rowIndex) => Object.fromEntries(orderedFields.flatMap(field => {
         const raw = (row[headers.indexOf(field.fieldKey)] ?? '').trim();
         if (!raw) return [];
-        try { return [[field.fieldKey, csvValue(raw, field.type)]]; }
+        try { return [[field.fieldKey, csvValue(raw, field)]]; }
         catch (reason) { throw new Error(`Dòng ${rowIndex + 1}, cột ${field.label}: ${reason.message}`); }
       })));
       setBatchRecords(records);
@@ -216,7 +219,7 @@ export default function RequestFormPage() {
     <form onSubmit={submit} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-100 p-6"><div className="flex items-start gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-5 text-sky-700"><Info size={17} className="mt-0.5 shrink-0"/><span>{preview ? 'Đây là chế độ chạy thử. Bạn có thể kiểm tra giao diện và validation nhưng hệ thống sẽ không tạo instance.' : workflow?.instruction || 'Vui lòng điền đầy đủ và chính xác các thông tin trước khi gửi.'}</span></div></div>
       {batchMode ? <BatchImport fields={orderedFields} records={batchRecords} fileName={batchFileName} maxRows={workflow.maxBatchRows} onDownload={downloadTemplate} onImport={importBatch} onClear={() => { setBatchRecords([]); setBatchFileName(''); }} />
-        : <div className="grid grid-cols-1 gap-x-5 gap-y-6 p-6 md:grid-cols-2">{orderedFields.length ? orderedFields.map(field => <DynamicField key={field.id} field={field} value={values[field.fieldKey]} onChange={value => { setError(''); setDraftStatus('dirty'); setValues(current => ({ ...current, [field.fieldKey]: value })); setDraftRevision(current => current + 1); }}/>) : <div className="col-span-full rounded-xl border border-dashed border-slate-300 py-10 text-center text-sm text-slate-400">Form này không yêu cầu nhập thêm thông tin.</div>}</div>}
+        : <div className="grid grid-cols-1 gap-x-5 gap-y-6 p-6 md:grid-cols-2">{orderedFields.length ? orderedFields.map(field => <DynamicField key={field.id} field={field} users={users} value={values[field.fieldKey]} onChange={value => { setError(''); setDraftStatus('dirty'); setValues(current => ({ ...current, [field.fieldKey]: value })); setDraftRevision(current => current + 1); }}/>) : <div className="col-span-full rounded-xl border border-dashed border-slate-300 py-10 text-center text-sm text-slate-400">Form này không yêu cầu nhập thêm thông tin.</div>}</div>}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/60 px-6 py-5">
         <div className="flex items-center gap-3 text-xs text-slate-400">
           {!preview && !batchMode && <>
@@ -249,7 +252,7 @@ function BatchImport({ fields, records, fileName, maxRows, onDownload, onImport,
   return <div className="space-y-5 p-6"><div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-orange-200 bg-orange-50/50 p-4"><div><p className="text-sm font-bold text-slate-800">Nhập danh sách theo mẫu CSV</p><p className="mt-1 text-xs text-slate-500">Tối đa {maxRows} dòng. Không đổi tên cột ở dòng đầu tiên.</p></div><button type="button" onClick={onDownload} className="flex items-center gap-2 rounded-lg border border-orange-300 bg-white px-4 py-2 text-xs font-bold text-orange-600"><Download size={15}/>Tải form mẫu</button></div><label className="flex cursor-pointer flex-col items-center rounded-xl border-2 border-dashed border-slate-300 px-5 py-8 text-center hover:border-orange-400 hover:bg-orange-50/30"><FileSpreadsheet size={28} className="text-orange-500"/><span className="mt-2 text-sm font-bold text-slate-700">Chọn file CSV đã điền</span><span className="mt-1 text-xs text-slate-400">Hỗ trợ UTF-8, dấu phẩy hoặc chấm phẩy</span><input type="file" accept=".csv,text/csv" onChange={onImport} className="hidden"/></label>{records.length > 0 && <div className="overflow-hidden rounded-xl border border-emerald-200"><div className="flex items-center justify-between bg-emerald-50 px-4 py-3 text-xs text-emerald-700"><span><b>{records.length}</b> dòng hợp lệ từ {fileName}</span><button type="button" onClick={onClear} className="font-bold">Xóa file</button></div><div className="max-h-72 overflow-auto"><table className="min-w-full text-left text-xs"><thead className="sticky top-0 bg-slate-50"><tr>{fields.map(field => <th key={field.id} className="whitespace-nowrap px-3 py-2 font-semibold text-slate-600">{field.label}</th>)}</tr></thead><tbody>{records.slice(0, 50).map((record, index) => <tr key={index} className="border-t border-slate-100">{fields.map(field => <td key={field.id} className="max-w-52 truncate px-3 py-2 text-slate-600">{String(record[field.fieldKey] ?? '')}</td>)}</tr>)}</tbody></table></div>{records.length > 50 && <p className="border-t px-4 py-2 text-xs text-slate-400">Đang xem trước 50/{records.length} dòng.</p>}</div>}</div>;
 }
 
-function DynamicField({ field, value, onChange }) {
+function DynamicField({ field, value, onChange, users = [] }) {
   const normalized = `${field.fieldKey} ${field.label}`.toLocaleLowerCase('vi');
   const longText = field.type === 'TEXT' && /(lý do|ly do|mô tả|mo ta|nội dung|noi dung|ghi chú|ghi chu)/.test(normalized);
   const fullWidth = field.type === 'FILE' || field.type === 'CHECKBOX' || longText;
@@ -259,6 +262,11 @@ function DynamicField({ field, value, onChange }) {
       : field.type === 'TEXT' ? <input type="text" value={value ?? ''} onChange={event => onChange(event.target.value)} required={field.required} placeholder={field.placeholder || `Nhập ${field.label.toLocaleLowerCase('vi')}...`} className={style}/>
       : field.type === 'NUMBER' ? <input type="number" value={value ?? ''} onChange={event => onChange(event.target.value === '' ? '' : Number(event.target.value))} required={field.required} placeholder={field.placeholder || 'Nhập số'} className={style}/>
       : field.type === 'DATE' ? <div className="relative"><input type="date" value={value ?? ''} onChange={event => onChange(event.target.value)} required={field.required} className={`${style} pr-10`}/><CalendarDays size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"/></div>
+      : field.type === 'DATETIME' ? <input type="datetime-local" value={value ?? ''} onChange={event=>onChange(event.target.value)} required={field.required} className={style}/>
+      : field.type === 'SELECT' ? <select value={value ?? ''} onChange={event=>onChange(event.target.value)} required={field.required} className={style}><option value="">Chọn...</option>{(field.options||[]).map(option=><option key={option.value} value={option.value}>{option.label}</option>)}</select>
+      : field.type === 'RADIO' ? <div className="space-y-2">{(field.options||[]).map(option=><label key={option.value} className="flex items-center gap-2 text-sm font-normal"><input type="radio" name={field.fieldKey} value={option.value} checked={value===option.value} onChange={()=>onChange(option.value)} required={field.required} className="accent-orange-500"/>{option.label}</label>)}</div>
+      : field.type === 'MULTI_CHOICE' ? <div className="space-y-2">{(field.options||[]).map(option=><label key={option.value} className="flex items-center gap-2 text-sm font-normal"><input type="checkbox" checked={(value||[]).includes(option.value)} onChange={event=>onChange(event.target.checked?[...(value||[]),option.value]:(value||[]).filter(item=>item!==option.value))} className="accent-orange-500"/>{option.label}</label>)}</div>
+      : field.type === 'USER_PICKER' ? <select multiple={field.allowMultiple} value={field.allowMultiple?(value||[]):(value??'')} onChange={event=>onChange(field.allowMultiple?[...event.target.selectedOptions].map(option=>option.value):event.target.value)} required={field.required} className={style}><option value="">Chọn người dùng...</option>{users.map(user=><option key={user.id} value={user.id}>{user.displayName} · {user.email}</option>)}</select>
       : field.type === 'CHECKBOX' ? <span className="flex items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm font-normal text-slate-600"><input type="checkbox" checked={!!value} onChange={event => onChange(event.target.checked)} required={field.required} className="h-4 w-4 accent-orange-500"/>{field.placeholder || 'Xác nhận'}</span>
       : field.type === 'FILE' ? <FileField field={field} value={value} onChange={onChange}/>
       : <input type="text" value={value ?? ''} onChange={event => onChange(event.target.value)} required={field.required} className={style}/>} 
@@ -295,10 +303,15 @@ function parseCsvWithDelimiter(text, delimiter) {
   if (value || row.length) { row.push(value); rows.push(row); }
   return rows.filter(item => item.some(cell => cell.trim() !== ''));
 }
-function csvValue(raw, type) {
+function csvValue(raw, field) {
+  const type = field.type;
   if (type === 'TEXT') return raw;
   if (type === 'NUMBER') { const value = Number(raw.replace(',', '.')); if (!Number.isFinite(value)) throw new Error('không phải là số hợp lệ'); return value; }
   if (type === 'DATE') { if (!/^\d{4}-\d{2}-\d{2}$/.test(raw) || Number.isNaN(Date.parse(`${raw}T00:00:00Z`))) throw new Error('ngày phải có dạng YYYY-MM-DD'); return raw; }
+  if (type === 'DATETIME') { if (Number.isNaN(Date.parse(raw))) throw new Error('ngày giờ không hợp lệ'); return raw; }
+  if (type === 'SELECT' || type === 'RADIO') return raw;
+  if (type === 'MULTI_CHOICE' || (type === 'USER_PICKER' && field.allowMultiple)) return raw.split('|').map(value=>value.trim()).filter(Boolean);
+  if (type === 'USER_PICKER') return raw;
   if (type === 'CHECKBOX') {
     const normalized = raw.toLowerCase();
     if (['true', '1', 'yes', 'y', 'có', 'co', 'x'].includes(normalized)) return true;

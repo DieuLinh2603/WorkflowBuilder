@@ -4,6 +4,11 @@ public enum FieldType {
     TEXT,
     NUMBER,
     DATE,
+    DATETIME,
     FILE,
-    CHECKBOX
+    CHECKBOX,
+    SELECT,
+    MULTI_CHOICE,
+    RADIO,
+    USER_PICKER
 }

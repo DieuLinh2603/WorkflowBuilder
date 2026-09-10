@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Edit2, Eye, EyeOff, Lock, UserPlus, X } from 'lucide-react';
+import { apiFetch } from '../api';
 
-const EMPTY_FORM = { email: '', password: '', newPassword: '', displayName: '', jobTitle: '', managerId: '', systemRoles: [] };
+const EMPTY_FORM = { email: '', password: '', newPassword: '', displayName: '', jobTitle: '', managerId: '', systemRoles: [], moduleCodes: [] };
 const ROLES = [
   { value: 'ADMIN', label: 'Admin', desc: 'Toàn quyền quản trị hệ thống' },
   { value: 'WORKFLOW_OWNER', label: 'Workflow Owner', desc: 'Tạo, chỉnh sửa và publish workflow' },
   { value: 'EDITOR', label: 'Editor', desc: 'Được chỉnh sửa workflow nhưng không được xóa hoặc publish' },
-  { value: 'VIEWER', label: 'Viewer', desc: 'Chỉ xem workflow, không chỉnh sửa' },
-  { value: 'NONE', label: 'Không có (Approver/Reviewer only)', desc: 'Chỉ tham gia task được giao trong workflow' },
+  { value: 'VIEWER', label: 'Viewer', desc: 'Xem workflow, tạo yêu cầu và xử lý task được giao' },
 ];
 
 export default function UserFormPanel({ isOpen, onClose, mode = 'create', initialData, onSave, fetchDropdownUsers }) {
@@ -18,18 +18,23 @@ export default function UserFormPanel({ isOpen, onClose, mode = 'create', initia
   const [fieldErrors, setFieldErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [modules, setModules] = useState([]);
 
   useEffect(() => {
     if (!isOpen) return;
     setFormData(mode === 'edit' && initialData ? {
       ...EMPTY_FORM, email: initialData.email || '', displayName: initialData.displayName || '',
-      jobTitle: initialData.jobTitle || '', managerId: initialData.managerId || '', systemRoles: initialData.systemRoles || [],
+      jobTitle: initialData.jobTitle || '', managerId: initialData.managerId || '', systemRoles: initialData.systemRoles || [], moduleCodes: initialData.moduleCodes || [],
     } : EMPTY_FORM);
     setFieldErrors({}); setFormError(''); setSaving(false); setManagerQuery(''); setManagerOpen(false);
     fetchDropdownUsers(mode === 'edit' ? initialData?.id : null).then(setManagers).catch(() => setManagers([]));
+    apiFetch('/api/metadata/modules/all').then(response => response.ok ? response.json() : []).then(setModules).catch(() => setModules([]));
   }, [isOpen, mode, initialData, fetchDropdownUsers]);
 
-  const selectedManager = managers.find(manager => manager.id === formData.managerId);
+  const selectedManager = managers.find(manager => manager.id === formData.managerId)
+    || (formData.managerId && initialData?.managerName
+      ? { id: formData.managerId, displayName: initialData.managerName }
+      : null);
   const filteredManagers = useMemo(() => managers.filter(manager => manager.displayName?.toLocaleLowerCase('vi').includes(managerQuery.toLocaleLowerCase('vi'))), [managers, managerQuery]);
   if (!isOpen) return null;
 
@@ -38,7 +43,8 @@ export default function UserFormPanel({ isOpen, onClose, mode = 'create', initia
     setFieldErrors(current => ({ ...current, [field]: '' }));
     setFormError('');
   };
-  const toggleRole = role => updateField('systemRoles', role === 'NONE' ? [] : formData.systemRoles.includes(role) ? formData.systemRoles.filter(item => item !== role) : [...formData.systemRoles, role]);
+  const toggleRole = role => updateField('systemRoles', formData.systemRoles.includes(role) ? formData.systemRoles.filter(item => item !== role) : [...formData.systemRoles, role]);
+  const toggleModule = code => updateField('moduleCodes', formData.moduleCodes.includes(code) ? formData.moduleCodes.filter(item => item !== code) : [...formData.moduleCodes, code]);
 
   const submit = async event => {
     event.preventDefault();
@@ -82,7 +88,9 @@ export default function UserFormPanel({ isOpen, onClose, mode = 'create', initia
             </div>
           </section>
 
-          <section><h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-gray-500">Role hệ thống</h3><div className="space-y-3">{ROLES.map(role => { const selected = role.value === 'NONE' ? formData.systemRoles.length === 0 : formData.systemRoles.includes(role.value); return <label key={role.value} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${selected ? 'border-orange-400 bg-orange-50/50' : 'border-gray-200 hover:border-gray-300'}`}><input type={role.value === 'NONE' ? 'radio' : 'checkbox'} checked={selected} onChange={() => toggleRole(role.value)} className="mt-1 accent-orange-500"/><span><span className={`block text-sm font-semibold ${selected ? 'text-orange-700' : 'text-slate-800'}`}>{role.label}</span><span className="mt-0.5 block text-xs text-gray-500">{role.desc}</span></span></label>; })}</div><div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-700">User không có role hệ thống vẫn có thể được giao làm Approver, Reviewer hoặc Assignee tại từng step.</div></section>
+          <section><h3 className="mb-4 text-xs font-bold uppercase tracking-wider text-gray-500">Role hệ thống <span className="text-red-500">*</span></h3><div className="space-y-3">{ROLES.map(role => { const selected = formData.systemRoles.includes(role.value); return <label key={role.value} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${selected ? 'border-orange-400 bg-orange-50/50' : 'border-gray-200 hover:border-gray-300'}`}><input type="checkbox" checked={selected} onChange={() => toggleRole(role.value)} className="mt-1 accent-orange-500"/><span><span className={`block text-sm font-semibold ${selected ? 'text-orange-700' : 'text-slate-800'}`}>{role.label}</span><span className="mt-0.5 block text-xs text-gray-500">{role.desc}</span></span></label>; })}</div>{fieldErrors.systemRoles && <span className="mt-2 block text-xs font-medium text-red-500">{fieldErrors.systemRoles}</span>}</section>
+
+          <section><h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">Module nghiệp vụ {!formData.systemRoles.includes('ADMIN') && <span className="text-red-500">*</span>}</h3><p className="mb-4 text-xs text-gray-500">User chỉ xem và quản lý workflow thuộc các module được cấp. Admin có quyền toàn hệ thống.</p><div className="grid gap-3 sm:grid-cols-2">{modules.map(item => { const selected = formData.moduleCodes.includes(item.code); return <label key={item.code} className={`flex cursor-pointer gap-3 rounded-xl border p-3 ${selected ? 'border-orange-400 bg-orange-50/50' : 'border-gray-200'} ${!item.active ? 'opacity-60' : ''}`}><input type="checkbox" disabled={!item.active && !selected} checked={selected} onChange={() => toggleModule(item.code)} className="mt-1 accent-orange-500"/><span><span className="block text-sm font-semibold text-slate-700">{item.name}</span><span className="text-[11px] text-gray-400">{item.code}{!item.active ? ' · Đã ngừng' : ''}</span></span></label>; })}</div>{fieldErrors.moduleCodes && <span className="mt-2 block text-xs font-medium text-red-500">{fieldErrors.moduleCodes}</span>}</section>
         </div>
 
         <footer className="flex justify-end gap-3 border-t border-gray-200 bg-slate-50/60 px-8 py-5"><button type="button" disabled={saving} onClick={onClose} className="rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50">Hủy</button><button type="submit" disabled={saving} className="min-w-[160px] rounded-lg bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60">{saving ? 'Đang lưu...' : mode === 'create' ? 'Lưu User' : 'Cập nhật User'}</button></footer>
@@ -103,6 +111,8 @@ function validate(data, mode) {
   if (mode === 'create' && !data.password) errors.password = 'Vui lòng nhập mật khẩu ban đầu.';
   else if (mode === 'create' && data.password.length < 6) errors.password = 'Mật khẩu phải có ít nhất 6 ký tự.';
   if (mode === 'edit' && data.newPassword && data.newPassword.length < 6) errors.newPassword = 'Mật khẩu mới phải có ít nhất 6 ký tự.';
+  if (!data.systemRoles.length) errors.systemRoles = 'Vui lòng chọn ít nhất một role.';
+  if (!data.systemRoles.includes('ADMIN') && !data.moduleCodes.length) errors.moduleCodes = 'User không phải Admin phải thuộc ít nhất một module.';
   return errors;
 }
 function translateFieldErrors(errors) {
@@ -112,6 +122,7 @@ function translateFieldErrors(errors) {
     if (field === 'email' && /format/i.test(message)) return [field, 'Email không đúng định dạng.'];
     if (field === 'email' && /required/i.test(message)) return [field, 'Vui lòng nhập email.'];
     if (field === 'displayName') return [field, 'Vui lòng nhập tên hiển thị.'];
+    if (field === 'systemRoles') return [field, 'Vui lòng chọn ít nhất một role.'];
     return [field, message];
   }));
 }

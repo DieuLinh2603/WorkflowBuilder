@@ -98,6 +98,8 @@ public class WorkflowConnectionService {
             UUID currentConnectionId) {
         Set<ConnectionType> approvalTypes = EnumSet.of(ConnectionType.APPROVE, ConnectionType.REJECT);
         Set<ConnectionType> reviewTypes = EnumSet.of(ConnectionType.REVIEW_PASS, ConnectionType.REVIEW_FAIL);
+        Set<ConnectionType> assignmentTypes = EnumSet.of(ConnectionType.ASSIGNMENT_DONE, ConnectionType.ASSIGNMENT_FAIL);
+        Set<ConnectionType> systemTypes = EnumSet.of(ConnectionType.SYSTEM_SUCCESS, ConnectionType.SYSTEM_FAIL);
         if (from.getType() == StepType.APPROVAL) {
             if (!approvalTypes.contains(request.getType()))
                 throw new IllegalArgumentException("Approval Step chỉ hỗ trợ connection APPROVE hoặc REJECT");
@@ -118,7 +120,19 @@ public class WorkflowConnectionService {
                             && connection.getType() == request.getType());
             if (duplicate)
                 throw new IllegalArgumentException("Review Step chỉ có tối đa một nhánh " + request.getType());
-        } else if (approvalTypes.contains(request.getType()) || reviewTypes.contains(request.getType())) {
+        } else if (from.getType() == StepType.ASSIGNMENT || from.getType() == StepType.SYSTEM_ACTION) {
+            Set<ConnectionType> allowed = from.getType() == StepType.ASSIGNMENT ? assignmentTypes : systemTypes;
+            if (!allowed.contains(request.getType()))
+                throw new IllegalArgumentException(from.getType() + " chỉ hỗ trợ connection kết quả thành công hoặc thất bại");
+            if (!request.getClauses().isEmpty())
+                throw new IllegalArgumentException("Connection kết quả không chứa condition clauses");
+            boolean duplicate = connections.findByFromStepId(from.getId()).stream()
+                    .anyMatch(connection -> !connection.getId().equals(currentConnectionId)
+                            && connection.getType() == request.getType());
+            if (duplicate)
+                throw new IllegalArgumentException(from.getType() + " chỉ có tối đa một nhánh " + request.getType());
+        } else if (approvalTypes.contains(request.getType()) || reviewTypes.contains(request.getType())
+                || assignmentTypes.contains(request.getType()) || systemTypes.contains(request.getType())) {
             throw new IllegalArgumentException(
                     "Loại connection kết quả chỉ được dùng cho đúng loại Approval/Review Step");
         }
@@ -173,7 +187,7 @@ public class WorkflowConnectionService {
                     ConditionOperator.NOT_CONTAINS, ConditionOperator.STARTS_WITH, ConditionOperator.ENDS_WITH,
                     ConditionOperator.IN, ConditionOperator.NOT_IN, ConditionOperator.IS_EMPTY, ConditionOperator.NOT_EMPTY,
                     ConditionOperator.IS_NULL, ConditionOperator.NOT_NULL);
-            case NUMBER, DATE -> EnumSet.of(ConditionOperator.EQ, ConditionOperator.NEQ, ConditionOperator.GT,
+            case NUMBER, DATE, DATETIME -> EnumSet.of(ConditionOperator.EQ, ConditionOperator.NEQ, ConditionOperator.GT,
                     ConditionOperator.GTE, ConditionOperator.LT, ConditionOperator.LTE,
                     ConditionOperator.IN, ConditionOperator.NOT_IN, ConditionOperator.BETWEEN,
                     ConditionOperator.IS_EMPTY, ConditionOperator.NOT_EMPTY, ConditionOperator.IS_NULL, ConditionOperator.NOT_NULL);
@@ -181,6 +195,13 @@ public class WorkflowConnectionService {
                     ConditionOperator.IS_EMPTY, ConditionOperator.NOT_EMPTY, ConditionOperator.IS_NULL,
                     ConditionOperator.NOT_NULL, ConditionOperator.IS_TRUE, ConditionOperator.IS_FALSE);
             case FILE -> EnumSet.of(ConditionOperator.IS_EMPTY, ConditionOperator.NOT_EMPTY);
+            case SELECT, RADIO -> EnumSet.of(ConditionOperator.EQ, ConditionOperator.NEQ,
+                    ConditionOperator.IN, ConditionOperator.NOT_IN, ConditionOperator.IS_EMPTY,
+                    ConditionOperator.NOT_EMPTY, ConditionOperator.IS_NULL, ConditionOperator.NOT_NULL);
+            case MULTI_CHOICE, USER_PICKER -> EnumSet.of(ConditionOperator.EQ, ConditionOperator.NEQ,
+                    ConditionOperator.CONTAINS, ConditionOperator.NOT_CONTAINS,
+                    ConditionOperator.IS_EMPTY, ConditionOperator.NOT_EMPTY,
+                    ConditionOperator.IS_NULL, ConditionOperator.NOT_NULL);
         };
     }
 
@@ -195,6 +216,7 @@ public class WorkflowConnectionService {
             switch (field.getType()) {
                 case NUMBER -> new BigDecimal(value);
                 case DATE -> LocalDate.parse(value);
+                case DATETIME -> java.time.LocalDateTime.parse(value);
                 case CHECKBOX -> {
                     if (!value.equalsIgnoreCase("true") && !value.equalsIgnoreCase("false"))
                         throw new IllegalArgumentException("Giá trị checkbox phải là true hoặc false");

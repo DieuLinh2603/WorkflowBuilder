@@ -40,6 +40,10 @@ public class CustomFieldDefinition {
 
     private String placeholder;
 
+    @Column(name = "configuration_json", nullable = false, columnDefinition = "TEXT")
+    @Builder.Default
+    private String configurationJson = "{}";
+
     @Column(name = "display_order", nullable = false)
     private int displayOrder;
 }

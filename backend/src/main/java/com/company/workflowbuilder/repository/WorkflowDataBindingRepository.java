@@ -8,4 +8,5 @@ public interface WorkflowDataBindingRepository extends JpaRepository<WorkflowDat
     List<WorkflowDataBinding> findByDatasetIdAndActiveTrue(UUID datasetId);
     List<WorkflowDataBinding> findByWorkflowId(UUID workflowId);
     Optional<WorkflowDataBinding> findByDatasetIdAndWorkflowId(UUID datasetId, UUID workflowId);
+    long countByDatasetId(UUID datasetId);
 }

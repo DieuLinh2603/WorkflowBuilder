@@ -1,6 +1,8 @@
 package com.company.workflowbuilder.dto.request;
 
 import com.company.workflowbuilder.entity.field.FieldType;
+import com.company.workflowbuilder.dto.FieldOption;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -25,4 +27,10 @@ public class CustomFieldCreateRequest {
     private boolean required;
     
     private String placeholder;
+
+    @Valid
+    @Builder.Default
+    private java.util.List<FieldOption> options = new java.util.ArrayList<>();
+
+    private boolean allowMultiple;
 }

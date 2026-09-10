@@ -100,6 +100,11 @@ public class InstanceController {
         return engine.withdraw(id, request);
     }
 
+    @PostMapping("/tasks/{taskId}/preview-outputs")
+    public List<Map<String, Object>> previewOutputs(@PathVariable UUID taskId, @RequestBody TaskActionRequest request) {
+        return engine.previewTaskOutputs(taskId, request);
+    }
+
     @PostMapping("/tasks/{taskId}/{action}")
     public InstanceResponse actTask(@PathVariable UUID taskId, @PathVariable String action,
             @RequestBody(required = false) TaskActionRequest request) {

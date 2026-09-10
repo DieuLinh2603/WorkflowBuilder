@@ -46,9 +46,11 @@ export default function UserDetailPanel({ user, loading, error, onClose, onEdit 
 
         <section className="mt-7 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
           <div className="mb-3 flex items-center gap-2"><ShieldCheck size={17} className="text-orange-500"/><h3 className="text-xs font-bold uppercase tracking-wide text-slate-600">Role hệ thống</h3></div>
-          <div className="flex flex-wrap gap-2">{roles.length ? roles.map(role => <span key={role} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${ROLE_STYLES[role] || 'bg-gray-100 text-gray-700'}`}>{ROLE_LABELS[role] || role}</span>) : <span className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-600">Approver/Reviewer only</span>}</div>
-          {!roles.length && <p className="mt-2 text-[11px] leading-5 text-gray-500">Tài khoản không có quyền hệ thống, chỉ tham gia các task được giao.</p>}
+          <div className="flex flex-wrap gap-2">{roles.length ? roles.map(role => <span key={role} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${ROLE_STYLES[role] || 'bg-gray-100 text-gray-700'}`}>{ROLE_LABELS[role] || role}</span>) : <span className="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600">Chưa gán role</span>}</div>
+          {!roles.length && <p className="mt-2 text-[11px] leading-5 text-red-500">Tài khoản cũ chưa có role. Vui lòng cập nhật và chọn Viewer hoặc role phù hợp.</p>}
         </section>
+
+        <section className="mt-4 rounded-xl border border-sky-100 bg-sky-50/60 p-4"><h3 className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-600">Module nghiệp vụ</h3><div className="flex flex-wrap gap-2">{user.moduleCodes?.length ? user.moduleCodes.map(code => <span key={code} className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-sky-700 shadow-sm">{code}</span>) : <span className="text-xs text-gray-500">Admin có quyền trên toàn bộ module</span>}</div></section>
 
         <section className="mt-5 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
           <div className="flex gap-2 text-xs leading-5 text-blue-700"><UserRound size={16} className="mt-0.5 shrink-0"/><span>Mật khẩu và thông tin xác thực không được hiển thị nhằm bảo vệ tài khoản.</span></div>

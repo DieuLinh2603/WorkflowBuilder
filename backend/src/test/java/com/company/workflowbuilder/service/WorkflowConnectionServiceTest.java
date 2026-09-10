@@ -8,6 +8,7 @@ import com.company.workflowbuilder.repository.WorkflowConnectionRepository;
 import com.company.workflowbuilder.repository.CustomFieldDefinitionRepository;
 import com.company.workflowbuilder.repository.WorkflowRepository;
 import com.company.workflowbuilder.repository.WorkflowStepRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -159,6 +160,38 @@ class WorkflowConnectionServiceTest {
         second.setClauses(new ArrayList<>(List.of(clause("project_count", ConditionOperator.GTE, "1"))));
 
         assertDoesNotThrow(() -> service.create(workflow.getId(), second));
+    }
+
+    @Test
+    void storesCombinedBasicAndCalculationExpression() throws Exception {
+        Workflow workflow = workflow();
+        WorkflowStep start = step(workflow, StepType.START);
+        WorkflowStep target = step(workflow, StepType.END);
+        mockLookup(workflow, start, target);
+        when(fields.findByStepWorkflowId(workflow.getId())).thenReturn(List.of(
+                CustomFieldDefinition.builder().step(start).fieldKey("department").label("Phòng ban").type(FieldType.TEXT).build(),
+                CustomFieldDefinition.builder().step(start).fieldKey("revenue").label("Doanh thu").type(FieldType.NUMBER).build(),
+                CustomFieldDefinition.builder().step(start).fieldKey("cost").label("Chi phí").type(FieldType.NUMBER).build()));
+
+        String json = """
+                {"type":"AND","builderMode":"COMBINED_CONDITION","children":[
+                  {"type":"AND","builderMode":"CONDITION_GROUPS","children":[
+                    {"type":"AND","children":[
+                      {"type":"COMPARE","operator":"EQ","left":{"type":"FIELD","fieldKey":"department"},"right":{"type":"VALUE","value":"IT"}}]}]},
+                  {"type":"COMPARE","operator":"GT",
+                   "left":{"type":"SUBTRACT","operands":[
+                     {"type":"FIELD","fieldKey":"revenue"},{"type":"FIELD","fieldKey":"cost"}]},
+                   "right":{"type":"VALUE","value":50}}
+                ]}
+                """;
+        ConnectionUpsertRequest request = request(start, target, ConnectionType.IF);
+        ConnectionUpsertRequest.Clause expressionClause = new ConnectionUpsertRequest.Clause();
+        expressionClause.setExpression(new ObjectMapper().readValue(json, java.util.Map.class));
+        request.setClauses(new ArrayList<>(List.of(expressionClause)));
+
+        var response = service.create(workflow.getId(), request);
+
+        assertEquals("COMBINED_CONDITION", response.getClauses().get(0).getExpression().get("builderMode"));
     }
 
     private void mockLookup(Workflow workflow, WorkflowStep... workflowSteps) {

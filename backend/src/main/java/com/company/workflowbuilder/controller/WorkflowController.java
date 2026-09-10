@@ -156,6 +156,12 @@ public class WorkflowController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping("/{id}/editor-candidates")
+    @PreAuthorize("hasAnyRole('ADMIN','WORKFLOW_OWNER')")
+    public ResponseEntity<java.util.List<com.company.workflowbuilder.dto.response.WorkflowEditorResponse>> editorCandidates(@PathVariable UUID id) {
+        return ResponseEntity.ok(workflowService.editorCandidates(id));
+    }
+
     @PutMapping("/{id}/editors/{userId}")
     @PreAuthorize("hasAnyRole('ADMIN','WORKFLOW_OWNER')")
     public ResponseEntity<WorkflowResponse> addEditor(@PathVariable UUID id, @PathVariable UUID userId) {

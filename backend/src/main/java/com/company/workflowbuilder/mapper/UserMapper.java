@@ -17,6 +17,7 @@ public interface UserMapper {
 
     List<UserResponse> toResponseList(List<User> users);
 
+    @Mapping(target = "managerId", source = "manager.id")
     @Mapping(target = "managerName", source = "manager.displayName")
     @Mapping(target = "avatarInitials", expression = "java(getInitials(user.getDisplayName()))")
     @Mapping(target = "avatarColor", expression = "java(getColor(user.getDisplayName()))")

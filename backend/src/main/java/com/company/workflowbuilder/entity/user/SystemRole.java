@@ -5,7 +5,8 @@ package com.company.workflowbuilder.entity.user;
  * These are NOT the same as step-level actors (Approver/Reviewer/Assignee)
  * which are resolved at runtime via StepActorRule.
  *
- * A User may have zero SystemRoles (e.g., an "Approver-only" user).
+ * Every user must have at least one system role. Approver, reviewer and
+ * assignee are step-level responsibilities that can be assigned to a viewer.
  */
 public enum SystemRole {
     ADMIN,

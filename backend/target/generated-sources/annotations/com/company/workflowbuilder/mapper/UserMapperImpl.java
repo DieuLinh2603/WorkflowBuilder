@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 
 @Generated(
     value = "org.mapstruct.ap.MappingProcessor",
-    date = "2026-09-09T11:20:55+0700",
+    date = "2026-09-10T21:09:49+0700",
     comments = "version: 1.5.5.Final, compiler: Eclipse JDT (IDE) 3.46.100.v20260826-1225, environment: Java 21.0.12.1 (Eclipse Adoptium)"
 )
 @Component
@@ -38,9 +38,13 @@ public class UserMapperImpl implements UserMapper {
         userResponse.email( user.getEmail() );
         userResponse.id( user.getId() );
         userResponse.jobTitle( user.getJobTitle() );
-        Set<SystemRole> set = user.getSystemRoles();
+        Set<String> set = user.getModuleCodes();
         if ( set != null ) {
-            userResponse.systemRoles( new LinkedHashSet<SystemRole>( set ) );
+            userResponse.moduleCodes( new LinkedHashSet<String>( set ) );
+        }
+        Set<SystemRole> set1 = user.getSystemRoles();
+        if ( set1 != null ) {
+            userResponse.systemRoles( new LinkedHashSet<SystemRole>( set1 ) );
         }
         userResponse.updatedAt( user.getUpdatedAt() );
 
@@ -69,15 +73,20 @@ public class UserMapperImpl implements UserMapper {
 
         UserListItemResponse.UserListItemResponseBuilder userListItemResponse = UserListItemResponse.builder();
 
+        userListItemResponse.managerId( userManagerId( user ) );
         userListItemResponse.managerName( userManagerDisplayName( user ) );
         userListItemResponse.createdAt( user.getCreatedAt() );
         userListItemResponse.displayName( user.getDisplayName() );
         userListItemResponse.email( user.getEmail() );
         userListItemResponse.id( user.getId() );
         userListItemResponse.jobTitle( user.getJobTitle() );
-        Set<SystemRole> set = user.getSystemRoles();
+        Set<String> set = user.getModuleCodes();
         if ( set != null ) {
-            userListItemResponse.systemRoles( new LinkedHashSet<SystemRole>( set ) );
+            userListItemResponse.moduleCodes( new LinkedHashSet<String>( set ) );
+        }
+        Set<SystemRole> set1 = user.getSystemRoles();
+        if ( set1 != null ) {
+            userListItemResponse.systemRoles( new LinkedHashSet<SystemRole>( set1 ) );
         }
 
         userListItemResponse.avatarInitials( getInitials(user.getDisplayName()) );

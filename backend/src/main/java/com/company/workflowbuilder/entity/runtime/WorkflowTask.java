@@ -19,5 +19,7 @@ public class WorkflowTask {
     @Enumerated(EnumType.STRING) @Column(nullable=false) @Builder.Default private TaskStatus status=TaskStatus.PENDING;
     @Column(name="deadline_at") private LocalDateTime deadlineAt;
     @Column(name="completed_at") private LocalDateTime completedAt;
+    @Column(name="review_results", columnDefinition="text") private String reviewResults;
+    @Column(name="calculated_results", columnDefinition="text") private String calculatedResults;
     @CreationTimestamp @Column(name="created_at",nullable=false,updatable=false) private LocalDateTime createdAt;
 }

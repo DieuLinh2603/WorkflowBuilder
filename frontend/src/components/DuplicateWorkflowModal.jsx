@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Copy, GitBranch, Info, X } from 'lucide-react';
+import { apiFetch } from '../api';
 
 export default function DuplicateWorkflowModal({ workflow, currentUser, fetchDropdownUsers, busy, error, onClose, onConfirm }) {
   const isAdmin = currentUser?.systemRoles?.includes('ADMIN');
@@ -7,11 +8,14 @@ export default function DuplicateWorkflowModal({ workflow, currentUser, fetchDro
   const [ownerId, setOwnerId] = useState(currentUser?.id || '');
   const [owners, setOwners] = useState([]);
   const [validationError, setValidationError] = useState('');
+  const [module, setModule] = useState(workflow.module || '');
+  const [modules, setModules] = useState([]);
 
   useEffect(() => {
     if (!isAdmin || !fetchDropdownUsers) return;
     fetchDropdownUsers().then(setOwners).catch(() => setOwners([]));
   }, [fetchDropdownUsers, isAdmin]);
+  useEffect(() => { apiFetch('/api/metadata/modules').then(response => response.ok ? response.json() : []).then(setModules).catch(() => setModules([])); }, []);
 
   const selectedOwner = useMemo(() => owners.find(owner => owner.id === ownerId), [ownerId, owners]);
 
@@ -22,6 +26,7 @@ export default function DuplicateWorkflowModal({ workflow, currentUser, fetchDro
     onConfirm({
       name: trimmedName,
       sourceVersionId: workflow.id,
+      module,
       ...(isAdmin && ownerId ? { ownerId } : {}),
     });
   };
@@ -53,6 +58,8 @@ export default function DuplicateWorkflowModal({ workflow, currentUser, fetchDro
           <input autoFocus maxLength={200} value={name} onChange={event => { setName(event.target.value); setValidationError(''); }} onKeyDown={event => event.key === 'Enter' && !busy && submit()} className="input-field" placeholder="Nhập tên workflow mới"/>
           <span className="mt-1 block text-right text-[10px] text-slate-400">{name.length}/200</span>
         </label>
+
+        <label className="block"><span className="mb-1.5 block text-sm font-semibold text-slate-700">Module đích <span className="text-red-500">*</span></span><select value={module} onChange={event => setModule(event.target.value)} className="input-field bg-white">{modules.map(item => <option key={item.code} value={item.code}>{item.name}</option>)}</select><span className="mt-1 block text-xs text-slate-400">Tên workflow chỉ cần duy nhất trong module được chọn.</span></label>
 
         {isAdmin && <label className="block">
           <span className="mb-1.5 block text-sm font-semibold text-slate-700">Người sở hữu workflow mới</span>

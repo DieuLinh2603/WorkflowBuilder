@@ -19,6 +19,18 @@ class PipelineDefinitionEngineTest {
 
     @BeforeEach void setup(){engine=new PipelineDefinitionEngine(mapper,connectors,files,cipher);ReflectionTestUtils.setField(engine,"maxRecords",1000);ReflectionTestUtils.setField(engine,"queryTimeout",2);}
 
+    @Test void stopsExecutionWhenPauseIsRequested() throws Exception {
+        UUID sourceId=UUID.randomUUID();
+        Map<String,Object> definition=Map.of(
+                "sources",List.of(Map.of("alias","source","type","CSV","fileVersionId",sourceId)),
+                "joins",List.of(),"transforms",List.of());
+        DataPipeline pipeline=pipeline(definition,List.of(field("id","STRING",true)),"id");
+
+        assertThatThrownBy(()->engine.execute(pipeline,()->true))
+                .isInstanceOf(PipelineDefinitionEngine.PipelinePausedException.class);
+        verifyNoInteractions(files);
+    }
+
     @Test void joinsCompositeKeysAndParsesUnicodeCsv()throws Exception{
         UUID peopleId=UUID.randomUUID(),deptId=UUID.randomUUID();
         when(files.findById(peopleId)).thenReturn(Optional.of(file("id,country,name,projects\n1,VN, Nguyễn Văn A ,6\n2,VN,Trần B,0")));
@@ -126,6 +138,26 @@ class PipelineDefinitionEngineTest {
         assertThat(result.records()).hasSize(1);
         assertThat(result.records().get(0)).containsEntry("name","Nguyen Van A");
         assertThat(result.detectedSchema()).containsEntry("id","STRING").containsEntry("active","STRING");
+    }
+
+    @Test void automaticallyFindsTheOnlyNestedRestArray()throws Exception{
+        var root=mapper.readTree("{\"data\":{\"items\":[{\"id\":1}]},\"meta\":{\"page\":1}}");
+        com.fasterxml.jackson.databind.JsonNode records=ReflectionTestUtils.invokeMethod(engine,"resolveRestRecords",root,"");
+        assertThat(records).hasSize(1);
+        assertThat(records.get(0).get("id").asInt()).isEqualTo(1);
+    }
+
+    @Test void acceptsSingleRestObjectAsOneRecord()throws Exception{
+        var root=mapper.readTree("{\"id\":1,\"name\":\"An\"}");
+        com.fasterxml.jackson.databind.JsonNode records=ReflectionTestUtils.invokeMethod(engine,"resolveRestRecords",root,"");
+        assertThat(records).hasSize(1);
+        assertThat(records.get(0).get("name").asText()).isEqualTo("An");
+    }
+
+    @Test void explainsAvailablePathsWhenRestResponseHasMultipleArrays()throws Exception{
+        var root=mapper.readTree("{\"users\":[],\"roles\":[]}");
+        assertThatThrownBy(()->ReflectionTestUtils.invokeMethod(engine,"resolveRestRecords",root,""))
+                .hasMessageContaining("users").hasMessageContaining("roles");
     }
 
     private PipelineFileVersion file(String value){return PipelineFileVersion.builder().contentBytes(value.getBytes(StandardCharsets.UTF_8)).build();}

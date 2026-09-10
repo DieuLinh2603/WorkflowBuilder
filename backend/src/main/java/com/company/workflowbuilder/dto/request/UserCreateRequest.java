@@ -3,6 +3,7 @@ package com.company.workflowbuilder.dto.request;
 import com.company.workflowbuilder.entity.user.SystemRole;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -33,8 +34,8 @@ public class UserCreateRequest {
 
     private UUID managerId;
 
-    /**
-     * System roles to assign. Can be empty (Approver-only user).
-     */
+    @NotEmpty(message = "At least one system role is required")
     private Set<SystemRole> systemRoles;
+
+    private Set<String> moduleCodes;
 }

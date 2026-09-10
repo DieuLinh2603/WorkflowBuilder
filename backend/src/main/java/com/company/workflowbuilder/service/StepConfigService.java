@@ -86,6 +86,7 @@ public class StepConfigService {
     @Transactional
     public Map<String,Object> configureReview(UUID workflowId, UUID stepId, ReviewConfigRequest request) {
         WorkflowStep step = step(workflowId, stepId, StepType.REVIEW); authorization.requireEdit(step.getWorkflow());
+        com.company.workflowbuilder.service.runtime.OutputCalculator.validate(request.getCalculatedOutputs());
         normalizeActor(request.getApproverMode(), request.getFixedUserEmail(), request.getActorUserIds(),
                 request.getActorRole(), request.getDynamicActorSource(), request::setFixedUserEmail, request::setActorUserIds);
         validateDeadline(request.getDeadlineHours(), request.getDeadlineDate());
@@ -112,6 +113,7 @@ public class StepConfigService {
     @Transactional
     public Map<String,Object> configureSystemAction(UUID workflowId, UUID stepId, SystemActionConfigRequest request) {
         WorkflowStep step = step(workflowId, stepId, StepType.SYSTEM_ACTION); authorization.requireEdit(step.getWorkflow());
+        com.company.workflowbuilder.service.runtime.OutputCalculator.validate(request.getCalculatedOutputs());
         requireDraft(step);
         Set<String> fieldKeys = new HashSet<>();
         fields.findByStepWorkflowId(workflowId).forEach(field -> fieldKeys.add(field.getFieldKey()));
@@ -124,6 +126,10 @@ public class StepConfigService {
                 throw new IllegalArgumentException("Trường cần cập nhật không tồn tại trong workflow: " + mapping.getTargetField());
         }
         switch (request.getActionType()) {
+            case CALCULATE_OUTPUT -> {
+                if (request.getCalculatedOutputs() == null || request.getCalculatedOutputs().isEmpty())
+                    throw new IllegalArgumentException("Cần ít nhất một cột output tính toán");
+            }
             case API_CALL -> {
                 validateHttpUrl(request.getEndpointUrl());
                 if (!Set.of("GET", "POST", "PUT", "PATCH", "DELETE").contains(request.getHttpMethod().toUpperCase(Locale.ROOT)))
@@ -242,12 +248,17 @@ public class StepConfigService {
         return switch (field.getType()) {
             case TEXT -> EnumSet.of(ConditionOperator.EQ, ConditionOperator.NEQ, ConditionOperator.CONTAINS,
                     ConditionOperator.IS_EMPTY, ConditionOperator.NOT_EMPTY);
-            case NUMBER, DATE -> EnumSet.of(ConditionOperator.EQ, ConditionOperator.NEQ, ConditionOperator.GT,
+            case NUMBER, DATE, DATETIME -> EnumSet.of(ConditionOperator.EQ, ConditionOperator.NEQ, ConditionOperator.GT,
                     ConditionOperator.GTE, ConditionOperator.LT, ConditionOperator.LTE,
                     ConditionOperator.IS_EMPTY, ConditionOperator.NOT_EMPTY);
             case CHECKBOX -> EnumSet.of(ConditionOperator.EQ, ConditionOperator.NEQ,
                     ConditionOperator.IS_EMPTY, ConditionOperator.NOT_EMPTY);
             case FILE -> EnumSet.of(ConditionOperator.IS_EMPTY, ConditionOperator.NOT_EMPTY);
+            case SELECT, RADIO -> EnumSet.of(ConditionOperator.EQ, ConditionOperator.NEQ,
+                    ConditionOperator.IS_EMPTY, ConditionOperator.NOT_EMPTY);
+            case MULTI_CHOICE, USER_PICKER -> EnumSet.of(ConditionOperator.EQ, ConditionOperator.NEQ,
+                    ConditionOperator.CONTAINS, ConditionOperator.NOT_CONTAINS,
+                    ConditionOperator.IS_EMPTY, ConditionOperator.NOT_EMPTY);
         };
     }
     private void requireDraft(WorkflowStep step) {

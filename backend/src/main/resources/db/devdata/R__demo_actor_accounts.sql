@@ -22,3 +22,9 @@ ON CONFLICT (user_id, role) DO NOTHING;
 INSERT INTO user_system_role (user_id, role)
 SELECT id, 'VIEWER' FROM users WHERE email = 'viewer@company.com'
 ON CONFLICT (user_id, role) DO NOTHING;
+
+INSERT INTO user_module_memberships (user_id, module_code)
+SELECT u.id, m.code
+FROM users u CROSS JOIN business_modules m
+WHERE u.email IN ('owner@company.com', 'editor@company.com', 'viewer@company.com')
+ON CONFLICT (user_id, module_code) DO NOTHING;

@@ -21,7 +21,9 @@ public class UserListItemResponse {
     private String displayName;
     private String email;
     private String jobTitle;
+    private UUID managerId;
     private String managerName;
     private Set<SystemRole> systemRoles;
+    private Set<String> moduleCodes;
     private LocalDateTime createdAt;
 }

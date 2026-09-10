@@ -44,5 +44,17 @@ class FlywayMigrationTest {
             assertThat(tables.next()).isTrue();
             assertThat(tables.getInt(1)).isEqualTo(4);
         }
+        try (Connection connection = POSTGRES.createConnection("");
+                Statement statement = connection.createStatement();
+                ResultSet columns = statement.executeQuery("""
+                        SELECT data_type FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = 'workflow_tasks'
+                          AND column_name IN ('review_results', 'calculated_results')
+                        """)) {
+            assertThat(columns.next()).isTrue();
+            assertThat(columns.getString(1)).isEqualTo("text");
+            assertThat(columns.next()).isTrue();
+            assertThat(columns.getString(1)).isEqualTo("text");
+        }
     }
 }

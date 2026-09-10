@@ -150,7 +150,15 @@ class WorkflowEngineServiceTest {
         assertThat(approved.getCurrentStepType()).isEqualTo("REVIEW");
         assertThat(approved.getFields()).containsEntry("processed","yes");
 
+        actionRequest.setReviewResults(List.of(new com.company.workflowbuilder.dto.ReviewResultItem("Kết luận", "Đã đối chiếu")));
+        actionRequest.setCalculatedOutputs(List.of(new com.company.workflowbuilder.dto.CalculatedOutput("score", "Điểm", "(10 + 2) * 3")));
         InstanceResponse reviewed = engine.act(instanceId,"COMPLETE",actionRequest);
+        assertThat(reviewed.getFields()).containsEntry("score", 36);
+        assertThat(taskStore.stream().filter(task -> task.getStep().getType() == StepType.REVIEW).findFirst().orElseThrow().getReviewResults()).contains("Đã đối chiếu");
+        assertThat(logStore).anyMatch(log -> log.getComment() != null && log.getComment().contains("Kết luận: Đã đối chiếu"));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> engine.act(instanceId,"COMPLETE",actionRequest));
+        actionRequest.setReviewResults(List.of());
+        actionRequest.setCalculatedOutputs(List.of());
         assertThat(reviewed.getCurrentStepType()).isEqualTo("ASSIGNMENT");
         InstanceResponse completed = engine.act(instanceId,"COMPLETE",actionRequest);
         assertThat(completed.getStatus()).isEqualTo(InstanceStatus.COMPLETED);
@@ -223,7 +231,18 @@ class WorkflowEngineServiceTest {
         authenticated.set(reviewer);
         when(currentUser.id()).thenReturn(reviewer.getId());
         assertThat(engine.myTask(taskStore.get(0).getId()).getBatchRecords()).hasSize(3);
-        InstanceResponse completed = engine.actTask(taskStore.get(0).getId(), "COMPLETE", new TaskActionRequest());
+        TaskActionRequest batchReview = new TaskActionRequest();
+        batchReview.setReviewResults(List.of(new com.company.workflowbuilder.dto.ReviewResultItem("Tổng hợp", "Đủ 3 hồ sơ")));
+        batchReview.setCalculatedOutputs(List.of(new com.company.workflowbuilder.dto.CalculatedOutput("amount", "Số tiền", "10 * 2"),
+                new com.company.workflowbuilder.dto.CalculatedOutput("total", "Tổng tiền", "SUM([amount])")));
+        var preview = engine.previewTaskOutputs(taskStore.get(0).getId(), batchReview);
+        assertThat(preview).hasSize(3);
+        assertThat(taskStore.get(0).getCalculatedResults()).isNull();
+        InstanceResponse completed = engine.actTask(taskStore.get(0).getId(), "COMPLETE", batchReview);
+        assertThat(engine.myTask(taskStore.get(0).getId()).getCalculatedRows()).allSatisfy(row -> assertThat(row).containsEntry("amount", 20).containsEntry("total", 60));
+        assertThat(instanceStore.get().getFieldSnapshot()).contains("\"total\":60");
+        assertThat(engine.myTask(taskStore.get(0).getId()).getReviewResults()).isEqualTo(batchReview.getReviewResults());
+        assertThat(logStore).anyMatch(log -> log.getComment() != null && log.getComment().contains("Đủ 3 hồ sơ"));
         assertThat(completed.getStatus()).isEqualTo(InstanceStatus.COMPLETED);
         assertThat(completed.getBatchStatusCounts()).containsEntry("COMPLETED", 3L);
     }
@@ -243,7 +262,13 @@ class WorkflowEngineServiceTest {
         CreateInstanceRequest request=new CreateInstanceRequest();request.setWorkflowId(workflow.getId());request.setFields(new HashMap<>());
         InstanceResponse submitted=engine.submit(request);authenticated.set(reviewer);
         TaskActionRequest reviewResult=new TaskActionRequest();reviewResult.setComment("Không đạt yêu cầu");
+        reviewResult.setReviewResults(List.of(new com.company.workflowbuilder.dto.ReviewResultItem("", "Thiếu chứng từ")));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> engine.act(submitted.getId(),"REJECT",reviewResult));
+        assertThat(taskStore.get(0).getStatus()).isEqualTo(TaskStatus.PENDING);
+        reviewResult.setReviewResults(List.of(new com.company.workflowbuilder.dto.ReviewResultItem("Cần bổ sung", "Thiếu chứng từ")));
         InstanceResponse rejected=engine.act(submitted.getId(),"REJECT",reviewResult);
+        assertThat(taskStore.get(0).getReviewResults()).contains("Thiếu chứng từ");
+        assertThat(logStore).anyMatch(log -> log.getComment() != null && log.getComment().contains("Cần bổ sung: Thiếu chứng từ"));
         assertThat(rejected.getStatus()).isEqualTo(InstanceStatus.REJECTED);
         assertThat(taskStore).hasSize(1).allMatch(task->task.getStatus()==TaskStatus.COMPLETED);
         verify(notificationCenter).create(eq(requester),eq("Yêu cầu không đạt review"),anyString(),eq(submitted.getRequestCode()),anyString());
@@ -409,6 +434,31 @@ class WorkflowEngineServiceTest {
 
         assertThat(completed.getStatus()).isEqualTo(InstanceStatus.APPROVED);
         assertThat(taskStore).allMatch(task -> task.getStatus() == TaskStatus.COMPLETED);
+    }
+
+    @Test
+    void multipleReviewersCanComputeTheSameOutputWithoutLosingTheirOwnResults() throws Exception {
+        User requester = user("owner-calc@company.com"), first = user("first-calc@company.com"), second = user("second-calc@company.com");
+        Workflow workflow = Workflow.builder().id(UUID.randomUUID()).familyId(UUID.randomUUID()).name("Calculation review")
+                .version("1.0").status(WorkflowStatus.PUBLISHED).owner(requester).build();
+        WorkflowStep review = step(workflow, StepType.REVIEW, "Review", mapper.writeValueAsString(Map.of("completionMode", "ALL")));
+        WorkflowStep end = step(workflow, StepType.END, "End", mapper.writeValueAsString(Map.of("outcome", "COMPLETED", "notifyRequester", false)));
+        WorkflowInstance instance = WorkflowInstance.builder().id(UUID.randomUUID()).workflow(workflow).createdBy(requester)
+                .currentStep(review).status(InstanceStatus.RUNNING).fieldSnapshot("{\"amount\":10}").startedAt(LocalDateTime.now()).build();
+        instanceStore.set(instance);
+        UUID activation = UUID.randomUUID();
+        for (User actor : List.of(first, second)) taskStore.add(WorkflowTask.builder().id(UUID.randomUUID())
+                .instance(instance).step(review).assignee(actor).activationId(activation).status(TaskStatus.PENDING).createdAt(LocalDateTime.now()).build());
+        when(connections.findByFromStepId(review.getId())).thenReturn(List.of(connection(workflow, review, end, ConnectionType.REVIEW_PASS)));
+        TaskActionRequest request = new TaskActionRequest();
+        request.setCalculatedOutputs(List.of(new com.company.workflowbuilder.dto.CalculatedOutput("total", "Total", "[amount] * 2")));
+        authenticated.set(first);
+        assertThat(engine.act(instance.getId(), "COMPLETE", request).getCurrentStepType()).isEqualTo("REVIEW");
+        request.setCalculatedOutputs(List.of(new com.company.workflowbuilder.dto.CalculatedOutput("total", "Total", "[amount] * 3")));
+        authenticated.set(second);
+        assertThat(engine.act(instance.getId(), "COMPLETE", request).getStatus()).isEqualTo(InstanceStatus.COMPLETED);
+        assertThat(taskStore.get(0).getCalculatedResults()).contains("\"total\":20");
+        assertThat(taskStore.get(1).getCalculatedResults()).contains("\"total\":30");
     }
 
     private User user(String email){return User.builder().id(UUID.randomUUID()).email(email).passwordHash("x").displayName(email).active(true).build();}

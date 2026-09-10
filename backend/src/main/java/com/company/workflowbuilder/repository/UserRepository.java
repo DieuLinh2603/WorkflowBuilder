@@ -28,6 +28,8 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
 
     List<User> findByActiveTrue();
 
+    List<User> findByActiveTrueAndManager_Id(UUID managerId);
+
     List<User> findByActiveTrueAndIdNot(UUID id);
 
     @Query("SELECT u FROM User u WHERE u.active = true AND " +

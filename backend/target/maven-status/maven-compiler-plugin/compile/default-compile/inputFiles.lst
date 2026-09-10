@@ -12,14 +12,17 @@ C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\w
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\request\AudienceRequest.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\repository\RequestDraftRepository.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\repository\WorkflowInstanceRepository.java
+C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\entity\metadata\BusinessModule.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\exception\ResourceNotFoundException.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\security\JwtTokenProvider.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\entity\runtime\TaskStatus.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\entity\workflow\WorkflowStatus.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\service\runtime\WorkflowFieldValidationService.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\response\ConnectionResponse.java
+C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\ReviewResultItem.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\entity\user\User.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\service\NotificationStepDeliveryService.java
+C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\response\BusinessModuleResponse.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\entity\SystemSetting.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\request\StepLayoutUpdateRequest.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\repository\DataConnectorRepository.java
@@ -30,6 +33,7 @@ C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\w
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\request\ForgotPasswordRequest.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\request\StepUpdateRequest.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\repository\ReminderDeliveryRepository.java
+C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\FieldOption.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\entity\user\UserGroup.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\entity\data\DataConnector.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\service\ConditionEvaluatorService.java
@@ -51,12 +55,14 @@ C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\w
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\entity\workflow\Workflow.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\entity\field\CustomFieldDefinition.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\entity\field\FieldType.java
+C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\entity\metadata\WorkflowTypeDefinition.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\entity\workflow\AudienceType.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\controller\DataConnectorController.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\controller\WorkflowStepController.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\response\StepDeleteResponse.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\entity\runtime\InstanceStepLog.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\repository\WorkflowTaskRepository.java
+C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\controller\WorkflowMetadataController.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\request\CreateBatchInstanceRequest.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\request\TaskActionRequest.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\response\WorkflowEditorResponse.java
@@ -69,8 +75,10 @@ C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\w
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\request\ChangePasswordRequest.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\entity\data\Dataset.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\service\WorkflowConnectionService.java
+C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\request\WorkflowTypeDefinitionRequest.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\service\data\WorkflowDataBindingExecutionService.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\request\UserCreateRequest.java
+C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\service\runtime\OutputCalculator.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\service\WorkflowEngineService.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\request\ApprovalConfigRequest.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\response\WorkflowStepResponse.java
@@ -79,6 +87,7 @@ C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\w
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\service\DeadlineReminderService.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\service\UserService.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\response\AuthResponse.java
+C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\response\WorkflowTypeDefinitionResponse.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\response\WorkflowVersionResponse.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\request\ConnectionUpsertRequest.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\WorkflowBuilderApplication.java
@@ -109,6 +118,7 @@ C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\w
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\repository\UserRepository.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\service\data\WorkflowDataBindingEventListener.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\entity\data\PipelineFileVersion.java
+C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\repository\BusinessModuleRepository.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\request\LoginRequest.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\mapper\UserMapper.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\security\JwtAuthFilter.java
@@ -118,6 +128,7 @@ C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\w
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\exception\GlobalExceptionHandler.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\repository\UserGroupRepository.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\service\runtime\WorkflowSystemActionExecutor.java
+C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\request\BusinessModuleRequest.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\repository\PipelineRunRepository.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\exception\DuplicateResourceException.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\controller\NotificationController.java
@@ -141,6 +152,7 @@ C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\w
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\service\runtime\WorkflowActorResolver.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\entity\workflow\WorkflowAudience.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\entity\notification\InAppNotification.java
+C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\repository\WorkflowTypeDefinitionRepository.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\service\StepConfigService.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\response\TaskResponse.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\entity\data\DatasetRecord.java
@@ -148,6 +160,7 @@ C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\w
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\response\CustomFieldResponse.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\repository\PipelineFileVersionRepository.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\request\StartStepConfigRequest.java
+C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\service\WorkflowMetadataService.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\entity\runtime\InstanceStatus.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\repository\CustomFieldDefinitionRepository.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\repository\DatasetRecordRepository.java
@@ -155,6 +168,7 @@ C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\w
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\service\data\DataConnectorService.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\entity\workflow\ConnectionType.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\repository\DatasetRepository.java
+C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\dto\CalculatedOutput.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\entity\data\DatasetVersion.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\service\workflow\WorkflowDefinitionAnalysis.java
 C:\Users\PC\Downloads\Learn\workflow-builder\backend\src\main\java\com\company\workflowbuilder\entity\workflow\StepType.java

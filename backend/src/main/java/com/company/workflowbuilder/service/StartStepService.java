@@ -1,6 +1,7 @@
 package com.company.workflowbuilder.service;
 
 import com.company.workflowbuilder.dto.request.CustomFieldCreateRequest;
+import com.company.workflowbuilder.dto.FieldOption;
 import com.company.workflowbuilder.dto.request.StartStepConfigRequest;
 import com.company.workflowbuilder.dto.response.CustomFieldResponse;
 import com.company.workflowbuilder.dto.response.StartStepConfigResponse;
@@ -31,6 +32,8 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -182,13 +185,14 @@ public class StartStepService {
         WorkflowStep step = findStepAndValidateWorkflow(workflowId, stepId);
         validateDraftStatus(step);
         rejectBatchFileField(step, request);
+        validateFieldConfiguration(request);
         
         String fieldKey = request.getFieldKey();
         if (fieldKey == null || fieldKey.trim().isEmpty()) {
             fieldKey = generateFieldKey(request.getLabel());
         }
         
-        if (customFieldRepository.existsByStepIdAndFieldKey(stepId, fieldKey)) {
+        if (customFieldRepository.existsByStepWorkflowIdAndFieldKey(workflowId, fieldKey)) {
             throw new IllegalArgumentException("Field key '" + fieldKey + "' đã tồn tại trong bước này.");
         }
         
@@ -202,6 +206,7 @@ public class StartStepService {
                 .type(request.getType())
                 .required(request.isRequired())
                 .placeholder(request.getPlaceholder())
+                .configurationJson(writeFieldConfiguration(request))
                 .displayOrder(nextOrder)
                 .build();
                 
@@ -214,6 +219,7 @@ public class StartStepService {
         WorkflowStep step = findStepAndValidateWorkflow(workflowId, stepId);
         validateDraftStatus(step);
         rejectBatchFileField(step, request);
+        validateFieldConfiguration(request);
         
         CustomFieldDefinition field = customFieldRepository.findById(fieldId)
                 .orElseThrow(() -> new ResourceNotFoundException("CustomField", "id", fieldId));
@@ -232,7 +238,7 @@ public class StartStepService {
             throw new IllegalStateException("Field người nhận CSV phải giữ nguyên key và kiểu TEXT; hãy bỏ cấu hình người nhận trước");
         
         // If key changes, check uniqueness
-        if (!field.getFieldKey().equals(newFieldKey) && customFieldRepository.existsByStepIdAndFieldKey(stepId, newFieldKey)) {
+        if (!field.getFieldKey().equals(newFieldKey) && customFieldRepository.existsByStepWorkflowIdAndFieldKey(workflowId, newFieldKey)) {
             throw new IllegalArgumentException("Field key '" + newFieldKey + "' đã tồn tại trong bước này.");
         }
         
@@ -241,6 +247,7 @@ public class StartStepService {
         field.setType(request.getType());
         field.setRequired(request.isRequired());
         field.setPlaceholder(request.getPlaceholder());
+        field.setConfigurationJson(writeFieldConfiguration(request));
         
         CustomFieldDefinition saved = customFieldRepository.save(field);
         return toFieldResponse(saved);
@@ -289,6 +296,34 @@ public class StartStepService {
         if (request.getType() == FieldType.FILE
                 && "BATCH".equals(parseConfig(step.getConfigJson()).get("submissionMode")))
             throw new IllegalArgumentException("Chế độ danh sách CSV không hỗ trợ field FILE; hãy dùng cột URL dạng TEXT");
+    }
+
+    private void validateFieldConfiguration(CustomFieldCreateRequest request) {
+        List<FieldOption> options = request.getOptions() == null ? List.of() : request.getOptions();
+        if (Set.of(FieldType.SELECT, FieldType.MULTI_CHOICE, FieldType.RADIO).contains(request.getType())) {
+            if (options.isEmpty())
+                throw new IllegalArgumentException("Field lựa chọn phải có ít nhất một option");
+            Set<String> values = new java.util.HashSet<>();
+            for (FieldOption option : options) {
+                String label = option == null ? "" : Objects.toString(option.getLabel(), "").trim();
+                String value = option == null ? "" : Objects.toString(option.getValue(), "").trim();
+                if (label.isBlank() || value.isBlank())
+                    throw new IllegalArgumentException("Nhãn và giá trị option không được để trống");
+                if (!values.add(value))
+                    throw new IllegalArgumentException("Giá trị option bị trùng: " + value);
+            }
+        }
+        if (request.getType() != FieldType.USER_PICKER && request.isAllowMultiple())
+            throw new IllegalArgumentException("Chỉ USER_PICKER hỗ trợ chọn nhiều user");
+    }
+
+    private String writeFieldConfiguration(CustomFieldCreateRequest request) {
+        Map<String, Object> config = new HashMap<>();
+        if (Set.of(FieldType.SELECT, FieldType.MULTI_CHOICE, FieldType.RADIO).contains(request.getType()))
+            config.put("options", request.getOptions());
+        if (request.getType() == FieldType.USER_PICKER)
+            config.put("allowMultiple", request.isAllowMultiple());
+        return writeConfig(config);
     }
 
     private String generateFieldKey(String label) {
@@ -343,6 +378,9 @@ public class StartStepService {
     }
     
     private CustomFieldResponse toFieldResponse(CustomFieldDefinition field) {
+        Map<String, Object> config = parseConfig(field.getConfigurationJson());
+        List<FieldOption> options = objectMapper.convertValue(config.getOrDefault("options", List.of()),
+                new TypeReference<List<FieldOption>>() {});
         return CustomFieldResponse.builder()
                 .id(field.getId())
                 .fieldKey(field.getFieldKey())
@@ -351,6 +389,8 @@ public class StartStepService {
                 .required(field.isRequired())
                 .placeholder(field.getPlaceholder())
                 .displayOrder(field.getDisplayOrder())
+                .options(options)
+                .allowMultiple(Boolean.TRUE.equals(config.get("allowMultiple")))
                 .build();
     }
 }

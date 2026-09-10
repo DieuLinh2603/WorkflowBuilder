@@ -77,10 +77,17 @@ function StepNode({ data, selected }) {
         <span className="pointer-events-none absolute left-[calc(100%+10px)] top-[67px] whitespace-nowrap rounded-full bg-red-50 px-2 py-1 text-[9px] font-bold text-red-600">KHÔNG ĐẠT</span>
         <button type="button" disabled={data.hasReviewFailConnection} className="nodrag nopan absolute left-[calc(100%+84px)] top-[66px] z-[60] flex h-6 w-6 items-center justify-center rounded-full border-2 border-red-400 bg-white text-red-500 shadow-sm hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-35" onClick={event => { event.preventDefault(); event.stopPropagation(); if (!data.hasReviewFailConnection) data.onAddClick?.(event, 'REVIEW_FAIL'); }} title={data.hasReviewFailConnection ? 'Đã có nhánh Không đạt' : 'Thêm bước xử lý khi review không đạt'}><Plus size={12} /></button>
         {data.hasLegacyDefault && <><Handle id="LEGACY_REVIEW_DEFAULT" type="source" position={Position.Right} style={{ top: 52 }} className="!h-3.5 !w-3.5 !border-2 !border-white !bg-amber-500" /><span className="pointer-events-none absolute left-[calc(100%+10px)] top-[43px] whitespace-nowrap rounded-full bg-amber-50 px-2 py-1 text-[9px] font-bold text-amber-700">CẦN PHÂN LOẠI</span></>}
+      </> : (data.stepType === 'ASSIGNMENT' || data.stepType === 'SYSTEM_ACTION') ? <>
+        <Handle id={data.stepType === 'ASSIGNMENT' ? 'ASSIGNMENT_DONE' : 'SYSTEM_SUCCESS'} type="source" position={Position.Right} style={{ top: 26 }} className="!h-3.5 !w-3.5 !border-2 !border-white !bg-emerald-500" />
+        <span className="pointer-events-none absolute left-[calc(100%+10px)] top-[15px] whitespace-nowrap rounded-full bg-emerald-50 px-2 py-1 text-[9px] font-bold text-emerald-700">THÀNH CÔNG</span>
+        <button type="button" disabled={data.hasSuccessConnection} className="nodrag nopan absolute left-[calc(100%+86px)] top-[14px] z-[60] flex h-6 w-6 items-center justify-center rounded-full border-2 border-emerald-400 bg-white text-emerald-600 disabled:opacity-35" onClick={event => { event.stopPropagation(); if (!data.hasSuccessConnection) data.onAddClick?.(event, data.stepType === 'ASSIGNMENT' ? 'ASSIGNMENT_DONE' : 'SYSTEM_SUCCESS'); }}><Plus size={12}/></button>
+        <Handle id={data.stepType === 'ASSIGNMENT' ? 'ASSIGNMENT_FAIL' : 'SYSTEM_FAIL'} type="source" position={Position.Right} style={{ top: 78 }} className="!h-3.5 !w-3.5 !border-2 !border-white !bg-red-500" />
+        <span className="pointer-events-none absolute left-[calc(100%+10px)] top-[67px] whitespace-nowrap rounded-full bg-red-50 px-2 py-1 text-[9px] font-bold text-red-600">THẤT BẠI</span>
+        <button type="button" disabled={data.hasFailureConnection} className="nodrag nopan absolute left-[calc(100%+72px)] top-[66px] z-[60] flex h-6 w-6 items-center justify-center rounded-full border-2 border-red-400 bg-white text-red-500 disabled:opacity-35" onClick={event => { event.stopPropagation(); if (!data.hasFailureConnection) data.onAddClick?.(event, data.stepType === 'ASSIGNMENT' ? 'ASSIGNMENT_FAIL' : 'SYSTEM_FAIL'); }}><Plus size={12}/></button>
       </> : data.stepType !== 'END' && <Handle id="DEFAULT" type="source" position={Position.Right} className="!w-3 !h-3 !bg-orange-400 !border-2 !border-white" />}
 
       {/* Plus button */}
-      {data.stepType !== 'END' && data.stepType !== 'APPROVAL' && data.stepType !== 'REVIEW' && (
+      {data.stepType !== 'END' && data.stepType !== 'APPROVAL' && data.stepType !== 'REVIEW' && data.stepType !== 'ASSIGNMENT' && data.stepType !== 'SYSTEM_ACTION' && (
         <button
           type="button"
           className="nodrag nopan absolute -right-4 top-1/2 z-[60] flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border-2 border-orange-400 bg-white text-orange-500 shadow-md transition-colors hover:bg-orange-50"
@@ -114,6 +121,8 @@ export default function WorkflowDesignerPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [showAddPopup, setShowAddPopup] = useState(false);
+  const [addingStep, setAddingStep] = useState(false);
+  const [designerError, setDesignerError] = useState('');
   const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 });
   const [sourceNodeId, setSourceNodeId] = useState(null);
   const [sourceConnectionType, setSourceConnectionType] = useState('DEFAULT');
@@ -190,7 +199,8 @@ export default function WorkflowDesignerPage() {
         stepType: step.type,
         onAddClick: (e, connectionType = 'DEFAULT') => {
           const rect = e.currentTarget.getBoundingClientRect();
-          setPopupPosition({ x: rect.right + 10, y: rect.top - 50 });
+          setPopupPosition({ x: rect.right + 10, y: rect.top - 12, anchorX: rect.left });
+          setDesignerError('');
           setSourceNodeId(step.id);
           setSourceConnectionType(connectionType);
           setShowAddPopup(true);
@@ -201,6 +211,8 @@ export default function WorkflowDesignerPage() {
         hasRejectConnection: connections.some(connection => connection.fromStepId === step.id && connection.type === 'REJECT'),
         hasReviewPassConnection: connections.some(connection => connection.fromStepId === step.id && connection.type === 'REVIEW_PASS'),
         hasReviewFailConnection: connections.some(connection => connection.fromStepId === step.id && connection.type === 'REVIEW_FAIL'),
+        hasSuccessConnection: connections.some(connection => connection.fromStepId === step.id && ['ASSIGNMENT_DONE', 'SYSTEM_SUCCESS'].includes(connection.type)),
+        hasFailureConnection: connections.some(connection => connection.fromStepId === step.id && ['ASSIGNMENT_FAIL', 'SYSTEM_FAIL'].includes(connection.type)),
         hasLegacyDefault: connections.some(connection => connection.fromStepId === step.id && connection.type === 'DEFAULT')
       }
     }));
@@ -216,21 +228,25 @@ export default function WorkflowDesignerPage() {
 
   useEffect(() => {
     const stepById = new Map(steps.map(step => [step.id, step]));
+    const failureConnections = new Set(['REJECT', 'REVIEW_FAIL', 'ASSIGNMENT_FAIL', 'SYSTEM_FAIL']);
+    const successConnections = new Set(['APPROVE', 'REVIEW_PASS', 'ASSIGNMENT_DONE', 'SYSTEM_SUCCESS']);
     setEdges(connections.map(connection => {
       const sourceType = stepById.get(connection.fromStepId)?.type;
-      const resultLegacy = (sourceType === 'APPROVAL' || sourceType === 'REVIEW') && connection.type === 'DEFAULT';
-      const color = connection.type === 'REJECT' || connection.type === 'REVIEW_FAIL' ? '#ef4444'
-        : connection.type === 'APPROVE' ? '#10b981' : connection.type === 'REVIEW_PASS' ? '#3b82f6'
+      const resultLegacy = ['APPROVAL', 'REVIEW', 'ASSIGNMENT', 'SYSTEM_ACTION'].includes(sourceType) && connection.type === 'DEFAULT';
+      const color = failureConnections.has(connection.type) ? '#ef4444'
+        : successConnections.has(connection.type) ? (connection.type === 'REVIEW_PASS' ? '#3b82f6' : '#10b981')
           : resultLegacy ? '#f59e0b' : '#f97316';
       const label = resultLegacy ? 'CẦN PHÂN LOẠI' : connection.type === 'REVIEW_PASS' ? 'ĐẠT'
         : connection.type === 'REVIEW_FAIL' ? 'KHÔNG ĐẠT'
           : connection.type === 'IF' ? `IF ${connection.clauses?.[0]?.expression ? 'ƒ(x)' : connection.clauses?.[0]?.fieldKey || ''}` : connection.type;
+      const displayLabel = ['ASSIGNMENT_DONE', 'SYSTEM_SUCCESS'].includes(connection.type) ? 'THÀNH CÔNG'
+        : ['ASSIGNMENT_FAIL', 'SYSTEM_FAIL'].includes(connection.type) ? 'THẤT BẠI' : label;
       return { id: connection.id, source: connection.fromStepId, target: connection.toStepId,
         sourceHandle: resultLegacy ? (sourceType === 'REVIEW' ? 'LEGACY_REVIEW_DEFAULT' : 'LEGACY_DEFAULT')
-          : ['APPROVE', 'REJECT', 'REVIEW_PASS', 'REVIEW_FAIL'].includes(connection.type) ? connection.type : undefined,
-        label, type: 'smoothstep', zIndex: 0, interactionWidth: 24,
+          : (failureConnections.has(connection.type) || successConnections.has(connection.type)) ? connection.type : undefined,
+        label: displayLabel, type: 'smoothstep', zIndex: 0, interactionWidth: 24,
         markerEnd: { type: MarkerType.ArrowClosed, color },
-        style: { stroke: color, strokeWidth: ['APPROVE', 'REJECT', 'REVIEW_PASS', 'REVIEW_FAIL'].includes(connection.type) ? 2.5 : 2, strokeDasharray: resultLegacy ? '6 5' : undefined },
+        style: { stroke: color, strokeWidth: (failureConnections.has(connection.type) || successConnections.has(connection.type)) ? 2.5 : 2, strokeDasharray: resultLegacy ? '6 5' : undefined },
         labelStyle: { fill: color, fontWeight: 700, fontSize: resultLegacy ? 9 : 10 },
         labelBgStyle: { fill: '#ffffff', fillOpacity: 0.95 }, labelBgPadding: [5, 3], labelBgBorderRadius: 5 };
     }));
@@ -238,15 +254,17 @@ export default function WorkflowDesignerPage() {
 
   // Handle adding a new step from popup
   const handleAddStep = async (stepType) => {
-    if (!id) return;
+    if (!id || addingStep) return;
 
     // Compute position: offset from source node
     const sourceNode = nodes.find(n => n.id === sourceNodeId);
     const posX = sourceNode ? sourceNode.position.x + 250 : 500;
-    const branchOffset = sourceConnectionType === 'APPROVE' || sourceConnectionType === 'REVIEW_PASS' ? -130
-      : sourceConnectionType === 'REJECT' || sourceConnectionType === 'REVIEW_FAIL' ? 130 : 0;
+    const branchOffset = ['APPROVE', 'REVIEW_PASS', 'ASSIGNMENT_DONE', 'SYSTEM_SUCCESS'].includes(sourceConnectionType) ? -130
+      : ['REJECT', 'REVIEW_FAIL', 'ASSIGNMENT_FAIL', 'SYSTEM_FAIL'].includes(sourceConnectionType) ? 130 : 0;
     const posY = sourceNode ? sourceNode.position.y + branchOffset : 200;
 
+    setAddingStep(true);
+    setDesignerError('');
     try {
       const newStep = await addStep(id, {
         type: stepType,
@@ -256,13 +274,19 @@ export default function WorkflowDesignerPage() {
 
       // Auto-add edge from source to new node
       if (sourceNodeId && newStep) {
-        await createConnection(id, { fromStepId: sourceNodeId, toStepId: newStep.id, type: sourceConnectionType, logicalOperator: 'AND', clauses: [] });
+        try {
+          await createConnection(id, { fromStepId: sourceNodeId, toStepId: newStep.id, type: sourceConnectionType, logicalOperator: 'AND', priority: 100, clauses: [] });
+        } catch (connectionError) {
+          setDesignerError(`Đã thêm node “${newStep.label}” nhưng chưa thể tự nối nhánh: ${connectionError.message}. Bạn có thể kéo connection thủ công từ node nguồn.`);
+        }
       }
-    } catch (err) {
-      alert(err.message);
-    } finally {
       setShowAddPopup(false);
+      setSourceNodeId(null);
       setSourceConnectionType('DEFAULT');
+    } catch (err) {
+      setDesignerError(`Không thể thêm node: ${err.message || 'Backend không trả về thông tin lỗi.'}`);
+    } finally {
+      setAddingStep(false);
     }
   };
 
@@ -379,6 +403,7 @@ export default function WorkflowDesignerPage() {
           <span className="px-2.5 py-0.5 rounded-md text-xs font-semibold bg-gray-200 text-gray-600">
             {workflow?.status || 'Draft'}
           </span>
+          <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">{workflow?.moduleName || workflow?.module}</span>
           <button type="button" onClick={() => navigate(`/workflows/${id}/versions`)} className="flex items-center gap-1.5 rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-500 hover:border-orange-300 hover:text-orange-600" title="Xem lịch sử phiên bản"><Clock3 size={14}/>Phiên bản</button>
         </div>
 
@@ -414,6 +439,7 @@ export default function WorkflowDesignerPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
         <div className="w-[250px] bg-white border-r border-gray-200 flex-shrink-0 overflow-auto">
+          {(workflow?.typeChecklist?.length > 0 || workflow?.recommendedStepTypes?.length > 0) && <div className="border-b border-orange-100 bg-orange-50/60 p-4"><p className="text-xs font-bold text-orange-700">Gợi ý: {workflow.typeName || workflow.type}</p>{workflow.recommendedStepTypes?.length > 0 && <p className="mt-2 text-[11px] leading-5 text-gray-500">Step nên dùng: {workflow.recommendedStepTypes.join(', ')}</p>}<ul className="mt-2 space-y-1">{workflow.typeChecklist?.map(item => <li key={item} className="flex gap-2 text-[11px] leading-4 text-gray-600"><span className="text-orange-500">✓</span>{item}</li>)}</ul></div>}
           <div className="px-4 py-3 border-b border-gray-100">
             <h3 className="text-[11px] font-bold text-gray-400 tracking-wider uppercase">CÁC BƯỚC ĐÃ THIẾT LẬP</h3>
           </div>
@@ -466,6 +492,7 @@ export default function WorkflowDesignerPage() {
 
         {/* Canvas */}
         <div className="flex-1 relative">
+          {designerError && <div className="absolute left-1/2 top-4 z-[90] flex max-w-xl -translate-x-1/2 items-start gap-3 rounded-xl border border-red-200 bg-white px-4 py-3 text-sm text-red-600 shadow-lg"><span className="flex-1">{designerError}</span><button type="button" onClick={() => setDesignerError('')} className="font-bold text-red-400 hover:text-red-600" aria-label="Đóng thông báo">×</button></div>}
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -502,6 +529,7 @@ export default function WorkflowDesignerPage() {
               onSelect={handleAddStep}
               onClose={() => setShowAddPopup(false)}
               hasStartStep={hasStartStep}
+              adding={addingStep}
             />
           )}
         </div>

@@ -23,7 +23,7 @@ export default function WorkflowsPage() {
   const [removing, setRemoving] = useState(false);
   const [workflows, setWorkflows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [query,setQuery]=useState(''),[statusFilter,setStatusFilter]=useState(''),[moduleFilter,setModuleFilter]=useState(''),[page,setPage]=useState(0);
+  const [query,setQuery]=useState(''),[statusFilter,setStatusFilter]=useState(''),[moduleFilter,setModuleFilter]=useState(''),[typeFilter,setTypeFilter]=useState(''),[page,setPage]=useState(0);
   const pageSize=8;
 
   const loadWorkflows = async () => {
@@ -113,10 +113,11 @@ export default function WorkflowsPage() {
       return [draft||published||ordered[0]].filter(Boolean);
     });
   },[workflows]);
-  const modules=useMemo(()=>[...new Set(workflowRows.map(item=>item.module).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi')),[workflowRows]);
-  const filtered=useMemo(()=>workflowRows.filter(item=>`${item.name} ${item.type} ${item.module} ${item.ownerName}`.toLocaleLowerCase('vi').includes(query.toLocaleLowerCase('vi'))&&(statusFilter?item.status===statusFilter:item.status!=='ARCHIVED')&&(!moduleFilter||item.module===moduleFilter)),[workflowRows,query,statusFilter,moduleFilter]);
+  const modules=useMemo(()=>[...new Map(workflowRows.filter(item=>item.module).map(item=>[item.module,item.moduleName || item.module])).entries()].sort((a,b)=>a[1].localeCompare(b[1],'vi')),[workflowRows]);
+  const types=useMemo(()=>[...new Map(workflowRows.filter(item=>item.type).map(item=>[item.type,item.typeName || item.type])).entries()].sort((a,b)=>a[1].localeCompare(b[1],'vi')),[workflowRows]);
+  const filtered=useMemo(()=>workflowRows.filter(item=>`${item.name} ${item.typeName || item.type} ${item.moduleName || item.module} ${item.ownerName}`.toLocaleLowerCase('vi').includes(query.toLocaleLowerCase('vi'))&&(statusFilter?item.status===statusFilter:item.status!=='ARCHIVED')&&(!moduleFilter||item.module===moduleFilter)&&(!typeFilter||item.type===typeFilter)),[workflowRows,query,statusFilter,moduleFilter,typeFilter]);
   const displayed=filtered.slice(page*pageSize,(page+1)*pageSize);
-  useEffect(()=>setPage(0),[query,statusFilter,moduleFilter]);
+  useEffect(()=>setPage(0),[query,statusFilter,moduleFilter,typeFilter]);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-grayBorder relative h-full flex flex-col overflow-hidden">
@@ -135,8 +136,10 @@ export default function WorkflowsPage() {
           </div>
           
           <select value={moduleFilter} onChange={event=>setModuleFilter(event.target.value)} className="border border-grayBorder rounded-md px-3 py-2 text-sm text-gray-700 bg-white min-w-[150px]">
-            <option value="">Module: Tất cả</option>{modules.map(module=><option key={module} value={module}>{module}</option>)}
+            <option value="">Module: Tất cả</option>{modules.map(([code,name])=><option key={code} value={code}>{name}</option>)}
           </select>
+
+          <select value={typeFilter} onChange={event=>setTypeFilter(event.target.value)} className="border border-grayBorder rounded-md px-3 py-2 text-sm text-gray-700 bg-white min-w-[150px]"><option value="">Loại: Tất cả</option>{types.map(([code,name])=><option key={code} value={code}>{name}</option>)}</select>
 
           <select value={statusFilter} onChange={event=>setStatusFilter(event.target.value)} className="border border-grayBorder rounded-md px-3 py-2 text-sm text-gray-700 bg-white min-w-[150px]">
             <option value="">Trạng thái: Tất cả</option><option value="DRAFT">Draft</option><option value="PUBLISHED">Published</option><option value="SUSPENDED">Suspended</option><option value="ARCHIVED">Archived</option>
@@ -175,8 +178,8 @@ export default function WorkflowsPage() {
                   <GitBranch size={16} className="text-gray-400" />
                   {wf.name}
                 </td>
-                <td className="py-3 px-4 text-gray-600">{wf.type}</td>
-                <td className="py-3 px-4 text-gray-600">{wf.module}</td>
+                <td className="py-3 px-4 text-gray-600">{wf.typeName || wf.type}</td>
+                <td className="py-3 px-4 text-gray-600"><span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">{wf.moduleName || wf.module}</span></td>
                 <td className="py-3 px-4 text-gray-600">v{wf.version}</td>
                 <td className="py-3 px-4">
                   <div className="flex flex-wrap items-center gap-2"><span className={`px-2.5 py-1 rounded-md text-xs font-semibold ${statusClass(wf.status)}`}>{wf.status}</span>{wf.status==='DRAFT'&&wf.activePublishedVersion&&<span className="rounded-md bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-600" title="Phiên bản này vẫn đang phục vụ các request mới và instance hiện tại">v{wf.activePublishedVersion} đang chạy</span>}</div>

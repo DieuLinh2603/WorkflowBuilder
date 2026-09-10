@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { Bell, Database, Globe2, Plus, PlusCircle, RefreshCw, Settings2, Trash2 } from 'lucide-react';
 import { apiFetch } from '../../api';
 import { PanelFrame, SectionLabel } from './StepPanelShared';
+import CalculatedOutputEditor from '../CalculatedOutputEditor';
 
 const DEFAULTS={actionType:'API_CALL',endpointUrl:'',httpMethod:'POST',payloadTemplate:'{\n  "requestCode": "{{requestCode}}"\n}',notificationChannel:'IN_APP',notificationTitle:'Thông báo workflow',notificationBody:'Yêu cầu {{requestCode}} đã được xử lý.',webhookUrl:'',targetType:'REQUEST',recordType:'',newStatus:'COMPLETED',mappings:[],failurePolicy:'STOP',retryCount:3,timeoutSeconds:30};
 const ACTIONS=[
  ['API_CALL','Gọi API ngoài',Globe2],['SEND_NOTIFICATION','Gửi thông báo',Bell],['UPDATE_DATA','Cập nhật dữ liệu',Database],
- ['CREATE_RECORD','Tạo record mới',PlusCircle],['UPDATE_STATUS','Cập nhật trạng thái',RefreshCw]
+ ['CREATE_RECORD','Tạo record mới',PlusCircle],['UPDATE_STATUS','Cập nhật trạng thái',RefreshCw],['CALCULATE_OUTPUT','Tính cột output',Database]
 ];
 
 export default function SystemActionStepPanel({workflowId,step,onClose,onDelete}){
@@ -20,6 +21,8 @@ export default function SystemActionStepPanel({workflowId,step,onClose,onDelete}
   <div className="space-y-6">
    <section><SectionLabel>Loại hành động</SectionLabel><div className="grid grid-cols-3 gap-2">{ACTIONS.map(([value,label,Icon])=><button key={value} type="button" onClick={()=>setConfig(c=>({...c,actionType:value,mappings:[]}))} className={`flex min-h-[78px] flex-col items-center justify-center gap-2 rounded-lg border px-2 py-3 text-[11px] font-semibold transition ${config.actionType===value?'border-orange-500 bg-orange-50 text-orange-600':'border-grayBorder bg-white text-slate-600 hover:border-orange-200'}`}><Icon size={18}/><span className="text-center">{label}</span></button>)}</div></section>
 
+   {config.actionType==='CALCULATE_OUTPUT'&&<CalculatedOutputEditor value={config.calculatedOutputs||[]} onChange={calculatedOutputs=>setConfig(c=>({...c,calculatedOutputs}))} fields={fields}/>}
+   {config.actionType==='CALCULATE_OUTPUT'&&<p className="text-xs text-slate-500">Hệ thống tính tự động và chuyển các cột kết quả sang bước tiếp theo. Với batch, SUM/AVG dùng các dòng trong yêu cầu batch tại thời điểm chạy.</p>}
    <section><SectionLabel>Chi tiết cấu hình</SectionLabel>
     {config.actionType==='API_CALL'&&<div className="space-y-4"><Field label="Endpoint URL *"><input value={config.endpointUrl} onChange={e=>setConfig(c=>({...c,endpointUrl:e.target.value}))} className="input-field" placeholder="https://api.example.com/orders"/></Field><Field label="Method"><select value={config.httpMethod} onChange={e=>setConfig(c=>({...c,httpMethod:e.target.value}))} className="input-field bg-white"><option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option></select></Field><Field label="Payload (JSON)"><textarea rows={5} value={config.payloadTemplate} onChange={e=>setConfig(c=>({...c,payloadTemplate:e.target.value}))} className="input-field resize-y font-mono text-xs"/></Field></div>}
     {config.actionType==='SEND_NOTIFICATION'&&<div className="space-y-4"><Field label="Kênh thông báo"><select value={config.notificationChannel} onChange={e=>setConfig(c=>({...c,notificationChannel:e.target.value}))} className="input-field bg-white"><option value="IN_APP">In-app Notification</option><option value="EMAIL">Email</option><option value="TEAMS">Teams</option><option value="WEBHOOK">Webhook</option></select></Field>{config.notificationChannel==='WEBHOOK'&&<Field label="Webhook URL"><input value={config.webhookUrl||''} onChange={e=>setConfig(c=>({...c,webhookUrl:e.target.value}))} className="input-field" placeholder="https://api.example.com/webhook"/></Field>}<Field label="Tiêu đề"><input value={config.notificationTitle} onChange={e=>setConfig(c=>({...c,notificationTitle:e.target.value}))} className="input-field"/></Field><Field label="Nội dung"><textarea rows={5} value={config.notificationBody} onChange={e=>setConfig(c=>({...c,notificationBody:e.target.value}))} className="input-field resize-y"/><p className="mt-1 text-[10px] text-gray-400">Có thể dùng {'{{requestCode}}'}, {'{{workflowName}}'} và field của workflow.</p></Field></div>}

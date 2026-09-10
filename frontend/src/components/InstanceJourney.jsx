@@ -20,7 +20,7 @@ export default function InstanceJourney({ history = [], instance, compact = fals
         <p className="mt-1 text-[10px] text-gray-400">Bắt đầu {formatDate(visit.startedAt)}</p>
         {visit.actions.map(action => <div key={action.id} className="mt-2 rounded-lg bg-slate-50 px-3 py-2">
           <p className="text-[11px] text-slate-600"><b>{labelAction(action.action)}</b>{action.actorName && ` · ${action.actorName}`} · {formatDate(action.actedAt)}</p>
-          {action.comment && <p className="mt-1 text-[11px] leading-4 text-slate-500">{action.comment}</p>}
+          {action.comment && <p className="mt-1 whitespace-pre-wrap break-words text-[11px] leading-4 text-slate-500">{action.comment}</p>}
         </div>)}
         {current && !visit.actions.length && <p className="mt-1 text-xs text-slate-500">Đang chờ người được giao xử lý.</p>}
         {current && visit.actions.length > 0 && <p className="mt-2 text-[10px] text-orange-600">Đã có {visit.actions.length} người xử lý, đang chờ đạt điều kiện chuyển bước.</p>}

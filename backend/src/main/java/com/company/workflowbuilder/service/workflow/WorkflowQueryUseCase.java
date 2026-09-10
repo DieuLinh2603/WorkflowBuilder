@@ -1,5 +1,6 @@
 package com.company.workflowbuilder.service.workflow;
 
+import com.company.workflowbuilder.dto.FieldOption;
 import com.company.workflowbuilder.dto.response.CustomFieldResponse;
 import com.company.workflowbuilder.dto.response.WorkflowResponse;
 import com.company.workflowbuilder.dto.response.WorkflowStepResponse;
@@ -14,6 +15,8 @@ import com.company.workflowbuilder.repository.WorkflowStepRepository;
 import com.company.workflowbuilder.service.CurrentUserService;
 import com.company.workflowbuilder.service.WorkflowAuthorizationService;
 import lombok.RequiredArgsConstructor;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +38,7 @@ public class WorkflowQueryUseCase {
     private final WorkflowAuthorizationService authorization;
     private final WorkflowViewMapper mapper;
     private final WorkflowDefinitionAnalysis analysis;
+    private final ObjectMapper objectMapper;
 
     public WorkflowResponse get(UUID id) {
         Workflow workflow = find(id);
@@ -68,7 +72,8 @@ public class WorkflowQueryUseCase {
                         .filter(workflow -> workflow.getEditors().stream()
                                 .anyMatch(editor -> editor.getId().equals(currentUser.id())))
                 ;
-        return stream.filter(workflow -> !analysis.isUnchangedDerivedDraft(workflow)).map(mapper::workflow).toList();
+        return stream.filter(authorization::canView)
+                .filter(workflow -> !analysis.isUnchangedDerivedDraft(workflow)).map(mapper::workflow).toList();
     }
 
     public List<WorkflowStepResponse> steps(UUID workflowId) {
@@ -89,10 +94,24 @@ public class WorkflowQueryUseCase {
                         stepOrder.getOrDefault(field.getStep().getId(), Integer.MAX_VALUE))
                         .thenComparingInt(CustomFieldDefinition::getDisplayOrder))
                 .forEach(field -> uniqueByKey.putIfAbsent(field.getFieldKey(), field));
-        return uniqueByKey.values().stream().map(field -> CustomFieldResponse.builder()
-                .id(field.getId()).fieldKey(field.getFieldKey()).label(field.getLabel()).type(field.getType())
-                .required(field.isRequired()).placeholder(field.getPlaceholder())
-                .displayOrder(field.getDisplayOrder()).build()).toList();
+        return uniqueByKey.values().stream().map(this::fieldResponse).toList();
+    }
+
+    private CustomFieldResponse fieldResponse(CustomFieldDefinition field) {
+        try {
+            Map<String, Object> config = objectMapper.readValue(field.getConfigurationJson(), new TypeReference<>() {});
+            List<FieldOption> options = objectMapper.convertValue(config.getOrDefault("options", List.of()),
+                    new TypeReference<List<FieldOption>>() {});
+            return CustomFieldResponse.builder().id(field.getId()).fieldKey(field.getFieldKey())
+                    .label(field.getLabel()).type(field.getType()).required(field.isRequired())
+                    .placeholder(field.getPlaceholder()).displayOrder(field.getDisplayOrder())
+                    .options(options).allowMultiple(Boolean.TRUE.equals(config.get("allowMultiple"))).build();
+        } catch (Exception ignored) {
+            return CustomFieldResponse.builder().id(field.getId()).fieldKey(field.getFieldKey())
+                    .label(field.getLabel()).type(field.getType()).required(field.isRequired())
+                    .placeholder(field.getPlaceholder()).displayOrder(field.getDisplayOrder())
+                    .options(List.of()).build();
+        }
     }
 
     private Workflow find(UUID id) {

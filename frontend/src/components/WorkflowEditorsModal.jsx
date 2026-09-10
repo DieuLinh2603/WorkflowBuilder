@@ -12,7 +12,9 @@ export default function WorkflowEditorsModal({ workflow, onChanged, onClose }) {
 
   useEffect(() => {
     let active = true;
-    apiFetch('/api/users/active', { toast: false })
+    setUsers([]);
+    setSelectedId('');
+    apiFetch(`/api/workflows/${workflow.id}/editor-candidates`, { toast: false })
       .then(async response => {
         if (!response.ok) throw new Error(await apiError(response, 'Không thể tải danh sách Editor'));
         const data = await response.json();
@@ -20,14 +22,12 @@ export default function WorkflowEditorsModal({ workflow, onChanged, onClose }) {
       })
       .catch(reason => active && setError(reason.message));
     return () => { active = false; };
-  }, []);
+  }, [workflow.id, workflow.editors]);
 
   const available = useMemo(() => {
     const assignedIds = new Set(editors.map(editor => editor.id));
     const normalized = query.trim().toLocaleLowerCase('vi');
-    return users.filter(user => user.active
-      && user.id !== workflow.ownerId
-      && user.systemRoles?.some(role => role === 'EDITOR' || role === 'VIEWER')
+    return users.filter(user => user.id !== workflow.ownerId
       && !assignedIds.has(user.id)
       && (!normalized || `${user.displayName} ${user.email} ${user.jobTitle || ''}`.toLocaleLowerCase('vi').includes(normalized)));
   }, [editors, query, users, workflow.ownerId]);
@@ -67,7 +67,7 @@ export default function WorkflowEditorsModal({ workflow, onChanged, onClose }) {
         <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><Users size={20}/></span>
         <div className="min-w-0 flex-1">
           <h2 id="workflow-editors-title" className="text-lg font-bold text-slate-800">Quản lý Editor</h2>
-          <p className="mt-1 text-xs leading-5 text-slate-500">Owner vẫn có toàn quyền thiết kế. Tài khoản Editor hoặc Viewer được chọn sẽ có quyền Editor chỉ trên workflow Draft này.</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">Chỉ chọn tài khoản Editor hoặc Viewer do Owner quản lý trực tiếp và thuộc module của workflow. Quyền Editor được cấp riêng trên workflow Draft này.</p>
         </div>
         <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100"><X size={18}/></button>
       </header>
@@ -95,7 +95,7 @@ export default function WorkflowEditorsModal({ workflow, onChanged, onClose }) {
         <section className="rounded-xl border border-dashed border-blue-200 bg-blue-50/40 p-4">
           <p className="mb-3 text-sm font-bold text-slate-700">Thêm Editor</p>
           <div className="relative mb-2"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={query} onChange={event => { setQuery(event.target.value); setSelectedId(''); }} className="input-field pl-9 text-sm" placeholder="Tìm theo tên, email hoặc chức danh..."/></div>
-          <div className="flex gap-2"><select value={selectedId} onChange={event => setSelectedId(event.target.value)} className="input-field flex-1 bg-white text-sm"><option value="">Chọn tài khoản Editor hoặc Viewer</option>{available.map(user => <option key={user.id} value={user.id}>{user.email} ({user.systemRoles?.includes('EDITOR') ? 'Editor' : 'Viewer'})</option>)}</select><button type="button" disabled={!selectedId || !!busyId} onClick={addEditor} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"><UserPlus size={16}/>Thêm</button></div>
+          <div className="flex gap-2"><select value={selectedId} onChange={event => setSelectedId(event.target.value)} className="input-field flex-1 bg-white text-sm"><option value="">Chọn tài khoản thuộc quản lý của Owner</option>{available.map(user => <option key={user.id} value={user.id}>{user.displayName} · {user.email}</option>)}</select><button type="button" disabled={!selectedId || !!busyId} onClick={addEditor} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"><UserPlus size={16}/>Thêm</button></div>
           {!available.length && <p className="mt-2 text-xs text-slate-400">Không còn tài khoản Editor hoặc Viewer phù hợp với tìm kiếm.</p>}
         </section>
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
