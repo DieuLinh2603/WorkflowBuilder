@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, SlidersHorizontal, Trash2, UserRound, X } from 'lucide-react';
+import { AlertTriangle, MousePointerClick, Settings2, SlidersHorizontal, Trash2, UserRound, X } from 'lucide-react';
 import { apiFetch } from '../../api';
+import { DismissibleBanner } from '../shared/UXHelpers';
 import AddFieldModal from './AddFieldModal';
 import { CompletionPolicy } from './StepPanelShared';
 
@@ -244,10 +245,9 @@ function ApprovalStepPanel({ workflowId, step, onClose, onDelete }) {
             </section>
 
             {config.mode === 'MANUAL' ? <>
-            <div className="flex gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-[11px] leading-5 text-blue-700">
-              <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+            <DismissibleBanner storageKey="wf_banner_reject_loop" icon={MousePointerClick}>
               <span>Nhánh <b>REJECT</b> có thể nối về một bước nhập liệu hoặc xử lý trước đó. Khi bị từ chối, request quay lại bước đó và sẽ tạo lượt phê duyệt mới sau khi xử lý xong.</span>
-            </div>
+            </DismissibleBanner>
             <section>
               <SectionLabel>Approver</SectionLabel>
               <div className="grid grid-cols-3 gap-1 bg-gray-100 rounded-lg p-1">
@@ -420,8 +420,9 @@ function AutoApprovalConditions({ conditions, fields, fieldsByKey, logicalOperat
   return <section className="space-y-4">
     <div>
       <SectionLabel>Điều kiện tự động phê duyệt</SectionLabel>
-      <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-700">
-        Hệ thống không tạo task cho người duyệt. Tất cả điều kiện đúng sẽ đi nhánh <b>APPROVE</b>; không thỏa sẽ đi nhánh <b>REJECT</b>.
+      <div className="flex gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs leading-5 text-blue-700">
+        <Settings2 size={16} className="mt-0.5 shrink-0 text-blue-500" />
+        <span>Hệ thống không tạo task cho người duyệt. Tất cả điều kiện đúng sẽ đi nhánh <b>APPROVE</b>; không thỏa sẽ đi nhánh <b>REJECT</b>.</span>
       </div>
     </div>
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Copy, GitBranch, Info, X } from 'lucide-react';
+import { DismissibleBanner } from './shared/UXHelpers';
 
 export default function DuplicateWorkflowModal({ workflow, currentUser, fetchDropdownUsers, busy, error, onClose, onConfirm }) {
   const isAdmin = currentUser?.systemRoles?.includes('ADMIN');
@@ -63,10 +64,10 @@ export default function DuplicateWorkflowModal({ workflow, currentUser, fetchDro
           {selectedOwner && <span className="mt-1 block text-xs text-slate-400">Workflow mới sẽ thuộc về {selectedOwner.displayName}.</span>}
         </label>}
 
-        <div className="flex gap-3 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 text-sm leading-6 text-blue-800">
-          <Info size={18} className="mt-0.5 shrink-0"/>
-          <div><b>Bản sao được tạo ở trạng thái DRAFT, phiên bản v1.0.</b><p className="text-xs text-blue-700">Các bước, field, điều kiện, kết nối và cấu hình sẽ được sao chép. Instance, lịch sử xử lý và Data Binding không được sao chép.</p></div>
-        </div>
+        <DismissibleBanner storageKey="wf_banner_duplicate_scope">
+          <b>Bản sao được tạo ở trạng thái DRAFT, phiên bản v1.0.</b>
+          <p className="mt-0.5 text-xs text-blue-700">Các bước, field, điều kiện, kết nối và cấu hình sẽ được sao chép. Instance, lịch sử xử lý và Data Binding không được sao chép.</p>
+        </DismissibleBanner>
       </div>
 
       <footer className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50/70 px-6 py-4">

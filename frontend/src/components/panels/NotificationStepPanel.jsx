@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AlertCircle, Bell, CheckCircle2, Link2, Mail, MessageSquare, X } from 'lucide-react';
 import { apiFetch } from '../../api';
+import { CollapsibleNote } from '../shared/UXHelpers';
 import { PanelFrame, SearchDropdown, SectionLabel, Toggle } from './StepPanelShared';
 
 const DEFAULTS = {
@@ -85,12 +86,15 @@ export default function NotificationStepPanel({ workflowId, workflowName, step, 
   const recipientField = startConfig?.fields?.find(field => field.fieldKey === startConfig.recordRecipientFieldKey);
   const recipientReady = startConfig?.submissionMode === 'BATCH' && !!recipientField;
 
-  return <PanelFrame wide icon={Bell} title="Cấu hình: Notification Step" subtitle="Thiết lập thông báo tự động khi bước được kích hoạt" onClose={onClose} onDelete={onDelete}
-    footer={<div className="flex items-center justify-between"><p className="text-[10px] text-gray-400">Email cần SMTP; Teams dùng endpoint do Admin cấu hình; Webhook dùng URL tại bước này.</p><div className="flex gap-3"><button type="button" onClick={onClose} className="rounded-lg border border-grayBorder px-5 py-2 text-xs">Hủy</button><button type="button" onClick={save} disabled={saving} className="btn-primary px-5 py-2 text-xs disabled:opacity-60">{saving ? 'Đang lưu...' : 'Lưu cấu hình'}</button></div></div>}>
+  return <PanelFrame wide icon={Bell} title="Cấu hình: Notification Step" subtitle="Gửi thông báo tự động" onClose={onClose} onDelete={onDelete}
+    footer={<div className="flex items-center justify-end gap-3"><button type="button" onClick={onClose} className="rounded-lg border border-grayBorder px-5 py-2 text-xs">Hủy</button><button type="button" onClick={save} disabled={saving} className="btn-primary px-5 py-2 text-xs disabled:opacity-60">{saving ? 'Đang lưu...' : 'Lưu cấu hình'}</button></div>}>
     <div className="space-y-6">
       <section><SectionLabel>Kênh gửi thông báo</SectionLabel><div className="grid grid-cols-4 gap-3">
         {CHANNELS.map(([value, label, icon]) => <Channel key={value} value={value} label={label} icon={icon} active={config.channels?.includes(value)} onClick={() => toggle('channels', value)} />)}
-      </div>{config.channels?.includes('WEBHOOK') && <div className="mt-3"><label className="mb-1.5 block text-[11px] font-semibold text-slate-600">URL webhook đích <span className="text-orange-500">*</span></label><input value={config.webhookUrl || ''} onChange={e => setConfig(c => ({ ...c, webhookUrl: e.target.value }))} className="input-field text-xs" placeholder="https://api.example.com/webhook" /></div>}</section>
+      </div>{config.channels?.includes('WEBHOOK') && <div className="mt-3"><label className="mb-1.5 block text-[11px] font-semibold text-slate-600">URL webhook đích <span className="text-orange-500">*</span></label><input value={config.webhookUrl || ''} onChange={e => setConfig(c => ({ ...c, webhookUrl: e.target.value }))} className="input-field text-xs" placeholder="https://api.example.com/webhook" /></div>}
+      <CollapsibleNote summary="Yêu cầu cấu hình kỹ thuật theo từng kênh" className="mt-3">
+        Email cần SMTP đã cấu hình; Teams dùng endpoint do Admin quản trị trong Cài đặt; Webhook dùng URL nhập trực tiếp ở trên.
+      </CollapsibleNote></section>
 
       <section><SectionLabel>Gửi khi nào (Trigger)</SectionLabel><div className="flex flex-wrap gap-5 text-xs">
         {TRIGGERS.map(([value, label]) => <Check key={value} label={label} checked={config.triggers?.includes(value)} onChange={() => toggle('triggers', value)} />)}

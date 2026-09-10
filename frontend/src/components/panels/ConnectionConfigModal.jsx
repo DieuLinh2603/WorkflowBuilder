@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Plus, Trash2, X } from 'lucide-react';
+import { AlertTriangle, GitBranch, Plus, Trash2, X } from 'lucide-react';
 import { apiFetch } from '../../api';
+import { CollapsibleNote } from '../shared/UXHelpers';
 import CalculationExpressionBuilder, { createCalculationExpression, isCalculationExpressionValid } from './CalculationExpressionBuilder';
 
 const OPERATORS = {
@@ -198,7 +199,9 @@ export default function ConnectionConfigModal({
             <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">Bản xem trước logic</p>
             <p><span className="font-bold text-orange-500">NẾU (IF)</span> {advanced ? 'biểu thức tính toán trả về true' : preview || '...'}</p>
             <p><span className="font-bold text-blue-500">THÌ</span> chuyển tới step: <span className="font-semibold">{targetStepLabel || connection.target}</span></p>
-            <p className="mt-2 text-xs leading-5 text-slate-400">Có thể tạo nhiều nhánh IF để phân loại A/B/C hoặc lọc theo tiêu chí. Hệ thống chọn nhánh IF thỏa đầu tiên; nên thiết kế các điều kiện không giao nhau. Nếu không nhánh nào thỏa, ELSE sẽ được dùng hoặc request giữ tại step hiện tại.</p>
+            <CollapsibleNote summary="Nguyên tắc đánh giá & điều kiện rẽ nhánh IF/ELSE" icon={GitBranch} className="mt-3">
+              Có thể tạo nhiều nhánh IF để phân loại A/B/C hoặc lọc theo tiêu chí. Hệ thống chọn nhánh IF thỏa đầu tiên; nên thiết kế các điều kiện không giao nhau. Nếu không nhánh nào thỏa, ELSE sẽ được dùng hoặc request giữ tại step hiện tại.
+            </CollapsibleNote>
           </div>
         </div>}
 
