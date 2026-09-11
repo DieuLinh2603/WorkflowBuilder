@@ -8,13 +8,18 @@ import { doubleClickCanvasNode } from './canvas.helpers.js';
 export async function openStepPanel(page: Page, labelOrType: string) {
   // Sidebar container is the 250px left column containing "CÁC BƯỚC ĐÃ THIẾT LẬP"
   const sidebar = page.locator('.w-\\[250px\\]');
-  const sidebarItem = sidebar.locator('div').filter({ hasText: new RegExp(labelOrType, 'i') }).first();
+  const sidebarItem = sidebar.locator('div[title*="đổi tên"]').filter({ hasText: new RegExp(labelOrType, 'i') }).first();
 
-  if (await sidebarItem.isVisible({ timeout: 2000 }).catch(() => false)) {
+  if (await sidebarItem.isVisible({ timeout: 3000 }).catch(() => false)) {
     await sidebarItem.click();
   } else {
-    // Fallback: double click on the canvas node
-    await doubleClickCanvasNode(page, labelOrType);
+    const textItem = sidebar.getByText(new RegExp(labelOrType, 'i')).first();
+    if (await textItem.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await textItem.click();
+    } else {
+      // Fallback: double click on the canvas node
+      await doubleClickCanvasNode(page, labelOrType);
+    }
   }
 
   // Verify panel opens on the right side

@@ -82,16 +82,17 @@ test.describe('Scenario Group 6: System Action Step Configuration', () => {
     // Select UPDATE_DATA
     await designerPage.getByRole('button', { name: 'Cập nhật dữ liệu' }).click();
 
-    // Click "+ Thêm mapping"
+    // Click "+ Thêm mapping" twice
     const addMappingBtn = designerPage.getByRole('button', { name: /Thêm mapping/i });
     await addMappingBtn.click();
+    await addMappingBtn.click();
 
-    // Mapping row should appear
-    const mappingRow = designerPage.locator('.grid-cols-\\[1fr_1fr_36px\\]').last();
-    await expect(mappingRow).toBeVisible();
+    // Mapping rows should appear
+    const mappingRows = designerPage.locator('.grid-cols-\\[1fr_1fr_36px\\]');
+    await expect(mappingRows.first()).toBeVisible();
 
-    // Test SC-SYS-09: Delete mapping row
-    const trashBtn = mappingRow.locator('button').first();
+    // Test SC-SYS-09: Delete one mapping row
+    const trashBtn = mappingRows.last().locator('button').first();
     await trashBtn.click();
 
     await savePanel(designerPage);
@@ -107,6 +108,12 @@ test.describe('Scenario Group 6: System Action Step Configuration', () => {
 
     const recordTypeInput = designerPage.getByPlaceholder(/Purchase Order/i);
     await recordTypeInput.fill('Hóa đơn VAT');
+
+    // Add required mapping row
+    const addMappingBtn = designerPage.getByRole('button', { name: /Thêm mapping/i });
+    await addMappingBtn.click();
+    const targetFieldInput = designerPage.locator('.grid-cols-\\[1fr_1fr_36px\\]').last().locator('input').first();
+    await targetFieldInput.fill('invoiceNumber');
 
     await savePanel(designerPage);
     await expect(designerPage.getByText(/Đã lưu cấu hình/i)).toBeVisible();
