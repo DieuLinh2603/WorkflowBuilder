@@ -93,6 +93,7 @@ public class WorkflowDefinitionAnalysis {
         Set<String> targetConnections = connections.findByWorkflowId(to.getId()).stream()
                 .map(this::connectionSignature).collect(Collectors.toSet());
         if (!sourceConnections.equals(targetConnections)) changes.add("Cập nhật sơ đồ connection và nhánh xử lý");
+        if (!Objects.equals(from.getName(), to.getName())) changes.add("Đổi tên workflow");
         if (!Objects.equals(from.getDescription(), to.getDescription())) changes.add("Cập nhật mô tả workflow");
         if (changes.isEmpty()) changes.add("Tạo phiên bản mới, không thay đổi cấu trúc");
         return changes;
@@ -109,9 +110,11 @@ public class WorkflowDefinitionAnalysis {
         List<String> connectionDefinitions = connections.findByWorkflowId(workflow.getId()).stream()
                 .map(connection -> stepKey(connection.getFromStep()) + "->" + connection.getType() + "->"
                         + stepKey(connection.getToStep()) + "|" + connection.getLogicalOperator() + "|"
+                        + connection.getPriority() + "|"
                         + connection.getClauses().stream().map(clause -> clause.getFieldKey() + "|"
                                 + clause.getOperator() + "|" + Objects.toString(clause.getExpectedValue(), "") + "|"
-                                + clause.getDisplayOrder()).sorted().toList()).sorted().toList();
+                                + Objects.toString(clause.getExpressionJson(), "") + "|" + clause.getDisplayOrder())
+                                .sorted().toList()).sorted().toList();
         return String.join("\n", List.of(Objects.toString(workflow.getName(), ""),
                 Objects.toString(workflow.getDescription(), ""), Objects.toString(workflow.getType(), ""),
                 Objects.toString(workflow.getModule(), ""), stepDefinitions.toString(), fieldDefinitions.toString(),
@@ -134,7 +137,9 @@ public class WorkflowDefinitionAnalysis {
 
     private String connectionSignature(WorkflowConnection connection) {
         return stepKey(connection.getFromStep()) + "->" + connection.getType() + "->"
-                + stepKey(connection.getToStep()) + "|" + connection.getClauses().stream()
-                .map(clause -> clause.getFieldKey() + clause.getOperator() + clause.getExpectedValue()).toList();
+                + stepKey(connection.getToStep()) + "|" + connection.getLogicalOperator() + "|"
+                + connection.getPriority() + "|" + connection.getClauses().stream()
+                .map(clause -> clause.getFieldKey() + "|" + clause.getOperator() + "|"
+                        + clause.getExpectedValue() + "|" + clause.getExpressionJson()).toList();
     }
 }

@@ -37,7 +37,8 @@ class StepConfigServiceApprovalModeTest {
         fields = mock(CustomFieldDefinitionRepository.class);
         users = mock(UserRepository.class);
         service = new StepConfigService(steps, users, fields,
-                mock(WorkflowAuthorizationService.class), new ObjectMapper());
+                mock(WorkflowAuthorizationService.class), new ObjectMapper(),
+                mock(com.company.workflowbuilder.service.data.DataConnectorService.class));
         workflow = Workflow.builder().id(UUID.randomUUID()).name("Purchase")
                 .status(WorkflowStatus.DRAFT).familyId(UUID.randomUUID()).build();
         approval = WorkflowStep.builder().id(UUID.randomUUID()).workflow(workflow)

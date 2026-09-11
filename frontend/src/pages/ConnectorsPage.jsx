@@ -3,7 +3,7 @@ import { Database, Eye, Pencil, Plus, ShieldCheck, Trash2, X } from 'lucide-reac
 import { apiError, apiFetch } from '../api';
 import { SearchDropdown, Toggle } from '../components/panels/StepPanelShared';
 
-const EMPTY_FORM = { name: '', description: '', connectorType: 'REST', baseUrl: '', jdbcUrl: '', username: '', password: '', token: '', allowedHosts: '', active: true };
+const EMPTY_FORM = { name: '', description: '', connectorType: 'REST', baseUrl: '', jdbcUrl: '', username: '', password: '', authType: 'NONE', token: '', apiKey: '', apiKeyHeader: 'X-API-Key', allowedHosts: '', active: true };
 
 export default function ConnectorsPage() {
   const [rows, setRows] = useState([]);
@@ -38,7 +38,7 @@ export default function ConnectorsPage() {
       ...EMPTY_FORM,
       name: connector.name || '', description: connector.description || '', connectorType: connector.connectorType,
       baseUrl: config.baseUrl || '', jdbcUrl: config.jdbcUrl || '',
-      allowedHosts: Array.isArray(config.allowedHosts) ? config.allowedHosts.join(', ') : '', active: connector.active !== false,
+      allowedHosts: Array.isArray(config.allowedHosts) ? config.allowedHosts.join(', ') : '', authType: connector.authType || 'NONE', apiKeyHeader: connector.apiKeyHeader || 'X-API-Key', active: connector.active !== false,
     });
     setGrants((connector.grantedUserIds || []).map(String));
     setUserQuery(''); setEditingId(connector.id); setViewingId(null); setError(''); setFormOpen(true);
@@ -49,7 +49,7 @@ export default function ConnectorsPage() {
       ? { baseUrl: form.baseUrl.trim(), allowedHosts: form.allowedHosts.split(',').map(value => value.trim()).filter(Boolean) }
       : { jdbcUrl: form.jdbcUrl.trim() };
     const body = { name: form.name.trim(), description: form.description.trim(), connectorType: form.connectorType, config, grantedUserIds: grants, active: form.active };
-    if (form.connectorType === 'REST' && form.token) body.credentials = { authType: 'BEARER', token: form.token };
+    if (form.connectorType === 'REST') body.credentials = form.authType === 'BEARER' ? { authType: 'BEARER', token: form.token } : form.authType === 'API_KEY' ? { authType: 'API_KEY', headerName: form.apiKeyHeader.trim() || 'X-API-Key', apiKey: form.apiKey } : { authType: 'NONE' };
     if (form.connectorType === 'POSTGRESQL' && (form.username || form.password)) body.credentials = { username: form.username, password: form.password };
     if (!editingId && !body.credentials) body.credentials = form.connectorType === 'REST' ? { authType: 'NONE' } : { username: '', password: '' };
     const response = await apiFetch(editingId ? `/api/connectors/${editingId}` : '/api/connectors', {
@@ -103,7 +103,9 @@ function ConnectorFormModal({ form, setForm, editingId, error, submitting, users
           {form.connectorType === 'REST' ? <>
             <input className="input-field" placeholder="https://api.example.com/items" value={form.baseUrl} onChange={event => setForm({ ...form, baseUrl: event.target.value })} required/>
             <input className="input-field" placeholder="Tên miền được phép, ví dụ: api.example.com" value={form.allowedHosts} onChange={event => setForm({ ...form, allowedHosts: event.target.value })}/>
-            <input className="input-field md:col-span-2" type="password" placeholder={editingId ? 'Bearer token mới (để trống để giữ token hiện tại)' : 'Bearer token (nếu có)'} value={form.token} onChange={event => setForm({ ...form, token: event.target.value })}/>
+            <select className="input-field" value={form.authType} onChange={event => setForm({ ...form, authType: event.target.value })}><option value="NONE">Không xác thực</option><option value="BEARER">Bearer token</option><option value="API_KEY">API key</option></select>
+            {form.authType === 'BEARER' && <input required={!editingId} className="input-field" type="password" placeholder={editingId ? 'Token mới (để trống để giữ token hiện tại)' : 'Bearer token'} value={form.token} onChange={event => setForm({ ...form, token: event.target.value })}/>}
+            {form.authType === 'API_KEY' && <><input required className="input-field" placeholder="Tên header, ví dụ X-API-Key" value={form.apiKeyHeader} onChange={event => setForm({ ...form, apiKeyHeader: event.target.value })}/><input required={!editingId} className="input-field" type="password" placeholder={editingId ? 'API key mới (để trống để giữ key hiện tại)' : 'API key'} value={form.apiKey} onChange={event => setForm({ ...form, apiKey: event.target.value })}/></>}
           </> : <>
             <input className="input-field md:col-span-2" placeholder="jdbc:postgresql://host:5432/database" value={form.jdbcUrl} onChange={event => setForm({ ...form, jdbcUrl: event.target.value })} required/>
             <input className="input-field" placeholder={editingId ? 'Username mới (để trống để giữ nguyên)' : 'Username'} value={form.username} onChange={event => setForm({ ...form, username: event.target.value })}/>

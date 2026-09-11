@@ -14,14 +14,18 @@ import com.company.workflowbuilder.service.CurrentUserService;
 import com.company.workflowbuilder.service.WorkflowAuthorizationService;
 import com.company.workflowbuilder.service.WorkflowMetadataService;
 import com.company.workflowbuilder.dto.response.WorkflowTypeDefinitionResponse;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.Comparator;
+import java.util.Map;
 
 @Component
 @RequiredArgsConstructor(onConstructor_ = @org.springframework.beans.factory.annotation.Autowired)
 public class WorkflowViewMapper {
+    private final ObjectMapper expressionMapper = new ObjectMapper();
     private final WorkflowAuthorizationService authorization;
     private final CurrentUserService currentUser;
     private final WorkflowMetadataService metadata;
@@ -66,11 +70,21 @@ public class WorkflowViewMapper {
     public ConnectionResponse connection(WorkflowConnection value) {
         return ConnectionResponse.builder().id(value.getId())
                 .fromStepId(value.getFromStep().getId()).toStepId(value.getToStep().getId())
-                .type(value.getType()).logicalOperator(value.getLogicalOperator())
+                .type(value.getType()).logicalOperator(value.getLogicalOperator()).priority(value.getPriority())
                 .clauses(value.getClauses().stream().map(clause -> ConnectionResponse.ClauseResponse.builder()
                         .id(clause.getId()).fieldKey(clause.getFieldKey()).operator(clause.getOperator())
-                        .expectedValue(clause.getExpectedValue()).build()).toList())
+                        .expectedValue(clause.getExpectedValue()).expression(readExpression(clause.getExpressionJson()))
+                        .build()).toList())
                 .build();
+    }
+
+    private Map<String, Object> readExpression(String value) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            return expressionMapper.readValue(value, new TypeReference<>() {});
+        } catch (Exception exception) {
+            throw new IllegalStateException("Stored condition expression is invalid", exception);
+        }
     }
 
     private String initials(String name) {

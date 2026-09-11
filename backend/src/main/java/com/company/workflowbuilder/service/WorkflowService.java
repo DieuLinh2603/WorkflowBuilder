@@ -4,6 +4,7 @@ import com.company.workflowbuilder.dto.request.StepCreateRequest;
 import com.company.workflowbuilder.dto.request.StepUpdateRequest;
 import com.company.workflowbuilder.dto.request.StepLayoutUpdateRequest;
 import com.company.workflowbuilder.dto.request.WorkflowCreateRequest;
+import com.company.workflowbuilder.dto.request.WorkflowMetadataUpdateRequest;
 import com.company.workflowbuilder.dto.request.DuplicateWorkflowRequest;
 import com.company.workflowbuilder.dto.response.WorkflowResponse;
 import com.company.workflowbuilder.dto.response.WorkflowStepResponse;
@@ -125,6 +126,20 @@ public class WorkflowService {
     @Transactional(readOnly = true)
     public WorkflowResponse getWorkflowById(UUID id) {
         return queries.get(id);
+    }
+
+    @Transactional
+    public WorkflowResponse updateMetadata(UUID workflowId, WorkflowMetadataUpdateRequest request) {
+        Workflow workflow = findWorkflowOrThrow(workflowId);
+        authorization.requireEdit(workflow);
+        String name = request.getName().trim();
+        if (workflowRepository.existsByModuleAndVersionAndNameIgnoreCaseAndFamilyIdNot(
+                workflow.getModule(), "1.0", name, workflow.getFamilyId()))
+            throw new com.company.workflowbuilder.exception.DuplicateResourceException(
+                    "Tên workflow đã tồn tại trong module này");
+        workflow.setName(name);
+        workflow.setDescription(trimToNull(request.getDescription()));
+        return viewMapper.workflow(workflowRepository.save(workflow));
     }
 
     @Transactional(readOnly = true)
@@ -347,12 +362,14 @@ public class WorkflowService {
             if (replacement == null) {
                 WorkflowConnection newConnection = WorkflowConnection.builder()
                         .workflow(step.getWorkflow()).fromStep(replacementFrom).toStep(replacementTo)
-                        .type(incoming.getType()).logicalOperator(incoming.getLogicalOperator()).build();
+                        .type(incoming.getType()).logicalOperator(incoming.getLogicalOperator())
+                        .priority(incoming.getPriority()).build();
                 for (int index = 0; index < incoming.getClauses().size(); index++) {
                     WorkflowConditionClause clause = incoming.getClauses().get(index);
                     newConnection.getClauses().add(WorkflowConditionClause.builder()
                             .connection(newConnection).fieldKey(clause.getFieldKey())
                             .operator(clause.getOperator()).expectedValue(clause.getExpectedValue())
+                            .expressionJson(clause.getExpressionJson())
                             .displayOrder(index).build());
                 }
                 replacement = newConnection;
@@ -416,11 +433,12 @@ public class WorkflowService {
             WorkflowConnection fresh = WorkflowConnection.builder().workflow(copy)
                     .fromStep(stepMap.get(old.getFromStep().getId()))
                     .toStep(stepMap.get(old.getToStep().getId())).type(old.getType())
-                    .logicalOperator(old.getLogicalOperator()).build();
+                    .logicalOperator(old.getLogicalOperator()).priority(old.getPriority()).build();
             for (WorkflowConditionClause clause : old.getClauses())
                 fresh.getClauses().add(WorkflowConditionClause.builder()
                         .connection(fresh).fieldKey(clause.getFieldKey()).operator(clause.getOperator())
-                        .expectedValue(clause.getExpectedValue()).displayOrder(clause.getDisplayOrder()).build());
+                        .expectedValue(clause.getExpectedValue()).expressionJson(clause.getExpressionJson())
+                        .displayOrder(clause.getDisplayOrder()).build());
             connectionRepository.save(fresh);
         }
         return viewMapper.workflow(copy);
@@ -599,6 +617,12 @@ public class WorkflowService {
         if (workflowRepository.existsByModuleAndVersionAndNameIgnoreCase(module, "1.0", name.trim()))
             throw new com.company.workflowbuilder.exception.DuplicateResourceException(
                     "Tên workflow đã tồn tại trong module này");
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private String getDefaultLabel(StepType type) {

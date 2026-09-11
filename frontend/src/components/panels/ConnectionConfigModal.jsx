@@ -32,6 +32,12 @@ const isGroupExpression = expression => expression?.builderMode === 'CONDITION_G
   && ['AND', 'OR'].includes(expression.type) && Array.isArray(expression.children);
 const isCombinedExpression = expression => expression?.builderMode === 'COMBINED_CONDITION'
   && ['AND', 'OR'].includes(expression.type) && Array.isArray(expression.children);
+const parseStoredExpression = clause => {
+  const stored = clause?.expression ?? clause?.expressionJson;
+  if (!stored) return null;
+  if (typeof stored !== 'string') return stored;
+  try { return JSON.parse(stored); } catch { return null; }
+};
 const expressionClause = expression => ({
   fieldKey: expression?.left?.fieldKey || '', operator: expression?.operator || 'EQ',
   expectedValue: expression?.right?.value ?? ''
@@ -73,7 +79,7 @@ export default function ConnectionConfigModal({
   const forced = !editing && forcedTypes.includes(connection?.sourceHandle)
     ? connection.sourceHandle : null;
   const [type, setType] = useState(connection?.currentType || forced || (resultSource ? '' : 'DEFAULT'));
-  const storedExpression = connection?.clauses?.find(item => item.expression)?.expression;
+  const storedExpression = connection?.clauses?.map(parseStoredExpression).find(Boolean) || null;
   const storedCombined = isCombinedExpression(storedExpression);
   const storedGroupExpression = storedCombined
     ? storedExpression.children.find(isGroupExpression)
@@ -97,7 +103,7 @@ export default function ConnectionConfigModal({
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!workflowId || resultSource) return;
+    if (!workflowId || (resultSource && !systemSource)) return;
     let active = true;
     setLoadingFields(true);
     readJson(apiFetch(`/api/workflows/${workflowId}/fields`))
@@ -113,7 +119,7 @@ export default function ConnectionConfigModal({
       .catch(reason => active && setError(reason.message || 'Không thể tải các trường của workflow'))
       .finally(() => active && setLoadingFields(false));
     return () => { active = false; };
-  }, [workflowId, resultSource]);
+  }, [workflowId, resultSource, systemSource]);
 
   const fieldsByKey = useMemo(() => new Map(fields.map(field => [field.fieldKey, field])), [fields]);
   const invalidClause = clause => {
@@ -125,7 +131,7 @@ export default function ConnectionConfigModal({
   const invalidApprovalType = approvalSource && type !== 'APPROVE' && type !== 'REJECT';
   const invalidReviewType = reviewSource && type !== 'REVIEW_PASS' && type !== 'REVIEW_FAIL';
   const invalidAssignmentType = assignmentSource && type !== 'ASSIGNMENT_DONE' && type !== 'ASSIGNMENT_FAIL';
-  const invalidSystemType = systemSource && type !== 'SYSTEM_SUCCESS' && type !== 'SYSTEM_FAIL';
+  const invalidSystemType = systemSource && !['SYSTEM_SUCCESS', 'SYSTEM_FAIL', 'IF', 'ELSE'].includes(type);
   const basicEnabled = conditionMode === 'BASIC' || conditionMode === 'COMBINED';
   const calculationEnabled = conditionMode === 'CALCULATION' || conditionMode === 'COMBINED';
   const invalidBasic = !groups.length || groups.some(group => !group.clauses.length || group.clauses.some(invalidClause));
@@ -191,13 +197,13 @@ export default function ConnectionConfigModal({
         {reviewSource && connection?.currentType === 'DEFAULT' && <div className="flex gap-2 rounded-lg border border-amber-100 bg-amber-50 p-3 text-xs leading-5 text-amber-700"><AlertTriangle size={16} className="mt-0.5 shrink-0" /><span>Connection DEFAULT cũ đang được coi là nhánh Đạt. Hãy phân loại thành Đạt hoặc Không đạt để luồng Review rõ ràng.</span></div>}
 
         <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Loại connection
-          <select value={type} onChange={event => setType(event.target.value)} disabled={!!forced} className="input-field mt-2 bg-white">
+          <select value={type} onChange={event => setType(event.target.value)} disabled={!!forced && !(systemSource && forced === 'SYSTEM_SUCCESS')} className="input-field mt-2 bg-white">
             {approvalSource
               ? <><option value="">Chọn nhánh...</option><option value="APPROVE">APPROVE — Được duyệt</option><option value="REJECT">REJECT — Bị từ chối</option></>
               : assignmentSource
                 ? <><option value="ASSIGNMENT_DONE">HOÀN THÀNH</option><option value="ASSIGNMENT_FAIL">THẤT BẠI</option></>
               : systemSource
-                ? <><option value="SYSTEM_SUCCESS">THÀNH CÔNG</option><option value="SYSTEM_FAIL">THẤT BẠI</option></>
+                ? <><option value="SYSTEM_SUCCESS">THÀNH CÔNG — không rẽ điều kiện</option><option value="IF">IF — theo field kết quả API</option><option value="ELSE">ELSE — khi IF không thỏa</option><option value="SYSTEM_FAIL">THẤT BẠI — API hoặc mapping lỗi</option></>
               : reviewSource
                 ? <><option value="">Chọn kết quả...</option><option value="REVIEW_PASS">ĐẠT — Chuyển tiếp</option><option value="REVIEW_FAIL">KHÔNG ĐẠT — Chuyển sang xử lý lỗi</option></>
               : <><option value="DEFAULT">Luồng mặc định</option><option value="IF">IF — khi điều kiện đúng</option><option value="ELSE">ELSE — khi IF không thỏa</option></>}

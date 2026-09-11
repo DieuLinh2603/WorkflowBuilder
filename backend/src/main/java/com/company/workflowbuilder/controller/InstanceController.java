@@ -4,6 +4,7 @@ import com.company.workflowbuilder.dto.request.*;
 import com.company.workflowbuilder.dto.response.*;
 import com.company.workflowbuilder.entity.runtime.TaskStatus;
 import com.company.workflowbuilder.service.WorkflowEngineService;
+import com.company.workflowbuilder.service.runtime.SystemActionQueryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
@@ -15,6 +16,7 @@ import java.util.*;
 @RequestMapping("/api")
 public class InstanceController {
     private final WorkflowEngineService engine;
+    private final SystemActionQueryService systemActions;
 
     @PostMapping("/instances")
     public ResponseEntity<InstanceResponse> submit(@Valid @RequestBody CreateInstanceRequest r) {
@@ -64,10 +66,20 @@ public class InstanceController {
         return engine.history(id);
     }
 
+    @GetMapping("/instances/{id}/system-actions")
+    public List<Map<String, Object>> systemActions(@PathVariable UUID id) {
+        return systemActions.forInstance(id);
+    }
+
     @GetMapping("/instances/{id}/batch-records")
     public Map<String, Object> batchRecords(@PathVariable UUID id,
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "50") int size) {
         return engine.batchRecords(id, page, size);
+    }
+
+    @GetMapping("/instances/{id}/batch-records/{rowNumber}")
+    public Map<String, Object> batchRecord(@PathVariable UUID id, @PathVariable int rowNumber) {
+        return engine.batchRecord(id, rowNumber);
     }
 
     @PostMapping("/instances/{id}/approve")

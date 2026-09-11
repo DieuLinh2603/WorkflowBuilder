@@ -132,9 +132,17 @@ public class WorkflowValidationService {
                 errors.add("Notification Step '" + step.getLabel() + "' thiếu template.");
             return;
         }
-        if (step.getType() == StepType.SYSTEM_ACTION
-                && outgoing.stream().noneMatch(connection -> connection.getType() == ConnectionType.SYSTEM_SUCCESS))
-            errors.add("System Action Step '" + step.getLabel() + "' phải có nhánh Thành công.");
+        if (step.getType() == StepType.SYSTEM_ACTION) {
+            boolean directSuccess = outgoing.stream().anyMatch(connection -> connection.getType() == ConnectionType.SYSTEM_SUCCESS);
+            boolean conditionalSuccess = outgoing.stream().anyMatch(connection -> connection.getType() == ConnectionType.IF);
+            boolean fallback = outgoing.stream().anyMatch(connection -> connection.getType() == ConnectionType.ELSE);
+            if (!directSuccess && !(conditionalSuccess && fallback))
+                errors.add("System Action Step '" + step.getLabel()
+                        + "' phải có nhánh Thành công hoặc đầy đủ nhánh IF/ELSE.");
+            if (directSuccess && (conditionalSuccess || fallback))
+                errors.add("System Action Step '" + step.getLabel()
+                        + "' không được dùng đồng thời nhánh Thành công và IF/ELSE.");
+        }
         if (step.getType() == StepType.SYSTEM_ACTION
                 && outgoing.stream().noneMatch(connection -> connection.getType() == ConnectionType.SYSTEM_FAIL))
             errors.add("System Action Step '" + step.getLabel() + "' phải có nhánh Thất bại.");

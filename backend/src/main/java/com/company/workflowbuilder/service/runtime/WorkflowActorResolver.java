@@ -4,6 +4,7 @@ import com.company.workflowbuilder.entity.runtime.WorkflowInstance;
 import com.company.workflowbuilder.entity.user.User;
 import com.company.workflowbuilder.repository.UserGroupRepository;
 import com.company.workflowbuilder.repository.UserRepository;
+import com.company.workflowbuilder.repository.InstanceStepLogRepository;
 import com.company.workflowbuilder.service.CurrentUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,7 @@ public class WorkflowActorResolver {
     private final UserRepository users;
     private final UserGroupRepository groups;
     private final CurrentUserService currentUser;
+    private final InstanceStepLogRepository logs;
 
     public List<User> resolve(WorkflowInstance instance, Map<String, Object> config) {
         String mode = Objects.toString(config.get("approverMode"), "FIXED_USER");
@@ -48,7 +50,17 @@ public class WorkflowActorResolver {
         else if ("REQUEST_CREATOR_MANAGER".equals(source))
             addActive(resolved, instance.getCreatedBy().getManager());
         else if ("PREVIOUS_ACTOR_MANAGER".equals(source))
-            addActive(resolved, currentUser.user().getManager());
+            addActive(resolved, previousActor(instance).map(User::getManager).orElse(null));
+    }
+
+    private java.util.Optional<User> previousActor(WorkflowInstance instance) {
+        try { return java.util.Optional.of(currentUser.user()); }
+        catch (RuntimeException ignored) {
+            var history = logs.findByInstanceIdOrderByActedAtAsc(instance.getId());
+            for (int index = history.size() - 1; index >= 0; index--)
+                if (history.get(index).getActor() != null) return java.util.Optional.of(history.get(index).getActor());
+            return java.util.Optional.ofNullable(instance.getCreatedBy());
+        }
     }
 
     private void addActive(Map<UUID, User> target, User user) {

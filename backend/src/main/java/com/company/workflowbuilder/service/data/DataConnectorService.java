@@ -95,12 +95,26 @@ public class DataConnectorService {
     private DataConnector get(UUID id) { return connectors.findById(id).orElseThrow(() -> new ResourceNotFoundException("DataConnector", "id", id)); }
     private void validateConfig(DataConnector row) {
         Map<String,Object> config = json(row.getConfigJson());
-        if ("REST".equals(row.getConnectorType())) validateRestUrl(String.valueOf(config.get("baseUrl")), config);
+        if ("REST".equals(row.getConnectorType())) {
+            validateRestUrl(String.valueOf(config.get("baseUrl")), config);
+            Map<String,Object> secret = credentials(row);
+            String authType = Objects.toString(secret.getOrDefault("authType", "NONE")).toUpperCase(Locale.ROOT);
+            if (!Set.of("NONE", "BEARER", "API_KEY").contains(authType))
+                throw new IllegalArgumentException("REST authType must be NONE, BEARER or API_KEY");
+            if ("BEARER".equals(authType) && Objects.toString(secret.get("token"), "").isBlank())
+                throw new IllegalArgumentException("Bearer token is required");
+            if ("API_KEY".equals(authType) && (Objects.toString(secret.get("apiKey"), "").isBlank()
+                    || Objects.toString(secret.get("headerName"), "").isBlank()))
+                throw new IllegalArgumentException("API key and header name are required");
+            if ("API_KEY".equals(authType) && Set.of("host", "content-length")
+                    .contains(Objects.toString(secret.get("headerName"), "").toLowerCase(Locale.ROOT)))
+                throw new IllegalArgumentException("API key header name is not allowed");
+        }
         else if (!String.valueOf(config.get("jdbcUrl")).startsWith("jdbc:postgresql://")) throw new IllegalArgumentException("Only jdbc:postgresql URLs are supported");
     }
     private void validateRestUrl(String raw, Map<String,Object> config) {
         try {
-            URI uri = URI.create(raw); if (!Set.of("http", "https").contains(uri.getScheme()) || uri.getHost() == null) throw new IllegalArgumentException("REST baseUrl must be http(s)");
+            URI uri = URI.create(raw); if (!Set.of("http", "https").contains(uri.getScheme()) || uri.getHost() == null || uri.getQuery() != null || uri.getFragment() != null) throw new IllegalArgumentException("REST baseUrl must be http(s) without query or fragment");
             Set<String> allowed = new HashSet<>(); Object value=config.get("allowedHosts"); if(value instanceof Collection<?> c) c.forEach(x->allowed.add(String.valueOf(x).toLowerCase()));
             if (!allowed.isEmpty() && !allowed.contains(uri.getHost().toLowerCase())) throw new IllegalArgumentException("REST host is not in allowedHosts");
             InetAddress address = InetAddress.getByName(uri.getHost());
@@ -115,7 +129,7 @@ public class DataConnectorService {
     }
     @Transactional(readOnly=true)
     public Map<String,Object> viewById(UUID id) { return view(accessible(id)); }
-    private Map<String,Object> view(DataConnector row) { Map<String,Object> out=new LinkedHashMap<>(); out.put("id",row.getId());out.put("name",row.getName());out.put("description",row.getDescription());out.put("connectorType",row.getConnectorType());out.put("config",json(row.getConfigJson()));out.put("active",row.isActive());out.put("credentialConfigured",row.getEncryptedCredentials()!=null);out.put("grantedUserIds",row.getGrantedUsers().stream().map(User::getId).toList());return out; }
+    private Map<String,Object> view(DataConnector row) { Map<String,Object> out=new LinkedHashMap<>(); out.put("id",row.getId());out.put("name",row.getName());out.put("description",row.getDescription());out.put("connectorType",row.getConnectorType());out.put("config",json(row.getConfigJson()));out.put("active",row.isActive());out.put("credentialConfigured",row.getEncryptedCredentials()!=null);if("REST".equals(row.getConnectorType())){Map<String,Object> secret=credentials(row);out.put("authType",secret.getOrDefault("authType","NONE"));out.put("apiKeyHeader",secret.getOrDefault("headerName","X-API-Key"));}out.put("grantedUserIds",row.getGrantedUsers().stream().map(User::getId).toList());return out; }
     private String required(Map<String,Object> body,String key){String v=String.valueOf(body.getOrDefault(key,"")).trim();if(v.isEmpty())throw new IllegalArgumentException(key+" is required");return v;}
     private String write(Object value){try{return mapper.writeValueAsString(value);}catch(Exception ex){throw new IllegalArgumentException("Invalid JSON",ex);}}
     private Map<String,Object> json(String value){try{return mapper.readValue(value,new TypeReference<>(){});}catch(Exception ex){throw new IllegalStateException("Stored connector JSON is invalid",ex);}}

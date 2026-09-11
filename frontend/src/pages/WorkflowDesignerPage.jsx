@@ -12,7 +12,7 @@ import {
   Position
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { ArrowLeft, Plus, Trash2, Zap, CheckCircle2, Eye, UserCheck, Bell, Cpu, CircleStop, Clock3, Users, DatabaseZap } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Zap, CheckCircle2, Eye, UserCheck, Bell, Cpu, CircleStop, Clock3, Users, DatabaseZap, Pencil, X } from 'lucide-react';
 import useWorkflowDesigner from '../hooks/useWorkflowDesigner';
 import AddStepPopup from '../components/AddStepPopup';
 import StartStepPanel from '../components/panels/StartStepPanel';
@@ -116,7 +116,7 @@ const nodeTypes = { stepNode: StepNode };
 export default function WorkflowDesignerPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { workflow, steps, connections, loading, validationErrors, loadWorkflow, addStep, updateStep, deleteStep, saveLayout, validateWorkflow, createConnection, updateConnection, deleteConnection, publishWorkflow, applyWorkflowResponse } = useWorkflowDesigner();
+  const { workflow, steps, connections, loading, validationErrors, loadWorkflow, addStep, updateStep, updateWorkflowMetadata, deleteStep, saveLayout, validateWorkflow, createConnection, updateConnection, deleteConnection, publishWorkflow, applyWorkflowResponse } = useWorkflowDesigner();
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -141,6 +141,9 @@ export default function WorkflowDesignerPage() {
   const [layoutSaving, setLayoutSaving] = useState(false);
   const [layoutMessage, setLayoutMessage] = useState('');
   const [showEditors, setShowEditors] = useState(false);
+  const [metadataForm, setMetadataForm] = useState(null);
+  const [metadataSaving, setMetadataSaving] = useState(false);
+  const [metadataError, setMetadataError] = useState('');
   const layoutRequestCount = useRef(0);
   const workflowRef = useRef(null);
 
@@ -165,6 +168,22 @@ export default function WorkflowDesignerPage() {
 
   const selectedStep = configuredStepId ? steps.find(step => step.id === configuredStepId) : null;
   const stepPendingDelete = deleteStepId ? steps.find(step => step.id === deleteStepId) : null;
+
+  const openMetadataEditor = () => {
+    setMetadataError('');
+    setMetadataForm({ name: workflow?.name || '', description: workflow?.description || '' });
+  };
+  const saveMetadata = async event => {
+    event.preventDefault();
+    const name = metadataForm?.name?.trim() || '';
+    if (!name) return setMetadataError('Tên workflow là bắt buộc.');
+    setMetadataSaving(true); setMetadataError('');
+    try {
+      await updateWorkflowMetadata(id, { name, description: metadataForm.description?.trim() || null });
+      setMetadataForm(null);
+    } catch (reason) { setMetadataError(reason.message); }
+    finally { setMetadataSaving(false); }
+  };
 
   const openStepConfig = useCallback((stepId) => {
     setShowValidationResult(false);
@@ -400,6 +419,7 @@ export default function WorkflowDesignerPage() {
           <h1 className="text-base font-bold text-gray-800 truncate max-w-[300px]">
             {workflow?.name || 'Workflow'}
           </h1>
+          {workflow?.canEdit && <button type="button" onClick={openMetadataEditor} className="rounded-md p-1.5 text-gray-400 hover:bg-orange-50 hover:text-orange-600" title="Sửa tên và mô tả workflow" aria-label="Sửa tên và mô tả workflow"><Pencil size={15}/></button>}
           <span className="px-2.5 py-0.5 rounded-md text-xs font-semibold bg-gray-200 text-gray-600">
             {workflow?.status || 'Draft'}
           </span>
@@ -563,6 +583,21 @@ export default function WorkflowDesignerPage() {
       {stepPendingDelete && <DeleteStepModal step={stepPendingDelete} steps={steps} connections={connections} onConfirm={confirmDeleteStep} onClose={() => setDeleteStepId(null)} />}
       {showEditors && workflow && <WorkflowEditorsModal workflow={workflow} onChanged={applyWorkflowResponse} onClose={() => setShowEditors(false)}/>} 
       {showDataBinding && workflow && <WorkflowDataBindingModal workflow={workflow} onClose={() => setShowDataBinding(false)}/>} 
+      {metadataForm && <WorkflowMetadataModal form={metadataForm} setForm={setMetadataForm} saving={metadataSaving} error={metadataError} onSubmit={saveMetadata} onClose={() => !metadataSaving && setMetadataForm(null)}/>}
     </div>
   );
+}
+
+function WorkflowMetadataModal({ form, setForm, saving, error, onSubmit, onClose }) {
+  return <div className="fixed inset-0 z-[180] flex items-center justify-center bg-slate-900/40 p-4" onMouseDown={event => event.target === event.currentTarget && onClose()}>
+    <form onSubmit={onSubmit} className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+      <header className="flex items-start justify-between border-b px-6 py-5"><div><h2 className="text-lg font-bold text-slate-800">Thông tin workflow</h2><p className="mt-1 text-xs text-slate-500">Tên và mô tả sẽ được lưu cho phiên bản Draft hiện tại.</p></div><button type="button" disabled={saving} onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100" aria-label="Đóng"><X size={18}/></button></header>
+      <div className="space-y-4 p-6">
+        {error && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+        <label className="block text-sm font-semibold text-slate-700">Tên workflow <span className="text-red-500">*</span><input autoFocus required maxLength={255} value={form.name} onChange={event => setForm(current => ({ ...current, name: event.target.value }))} className="input-field mt-1.5" placeholder="Nhập tên workflow"/></label>
+        <label className="block text-sm font-semibold text-slate-700">Mô tả<textarea rows={5} maxLength={2000} value={form.description} onChange={event => setForm(current => ({ ...current, description: event.target.value }))} className="input-field mt-1.5 resize-none" placeholder="Mô tả mục đích và phạm vi của workflow"/><span className="mt-1 block text-right text-[10px] font-normal text-slate-400">{form.description.length}/2000</span></label>
+      </div>
+      <footer className="flex justify-end gap-2 border-t bg-slate-50 px-6 py-4"><button type="button" disabled={saving} onClick={onClose} className="rounded-lg border bg-white px-4 py-2 text-sm font-semibold text-slate-600 disabled:opacity-50">Hủy</button><button disabled={saving || !form.name.trim()} className="btn-primary px-5 py-2 disabled:opacity-50">{saving ? 'Đang lưu...' : 'Lưu thay đổi'}</button></footer>
+    </form>
+  </div>;
 }

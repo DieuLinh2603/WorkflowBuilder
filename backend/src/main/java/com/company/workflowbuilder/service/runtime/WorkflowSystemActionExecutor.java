@@ -30,6 +30,9 @@ public class WorkflowSystemActionExecutor {
     private final NotificationCenterService notificationCenter;
     private final NotificationStepDeliveryService notificationDelivery;
     private final WorkflowJsonCodec codec;
+    private final SystemActionQueueService queue;
+
+    public enum Outcome { SUCCESS, FAILURE, QUEUED }
 
     @SuppressWarnings("unchecked")
     public boolean execute(WorkflowInstance instance, WorkflowStep step) {
@@ -37,9 +40,24 @@ public class WorkflowSystemActionExecutor {
     }
 
     public boolean execute(WorkflowInstance instance, WorkflowStep step, List<Map<String, Object>> calculationRows) {
+        return executeOutcome(instance, step, calculationRows, null) == Outcome.SUCCESS;
+    }
+
+    public Outcome executeOutcome(WorkflowInstance instance, WorkflowStep step,
+            List<Map<String, Object>> calculationRows, Integer batchRowNumber) {
         Map<String, Object> action = codec.stepConfig(step);
         String actionType = Objects.toString(action.get("actionType"), "");
-        if (actionType.isBlank()) return true;
+        if (actionType.isBlank()) return Outcome.SUCCESS;
+        if ("API_CALL".equals(actionType) && action.get("connectorId") != null) {
+            try {
+                var execution = queue.enqueue(instance, step, codec.snapshot(instance.getFieldSnapshot()), batchRowNumber);
+                audit(instance, step, "SYSTEM_ACTION_QUEUED", execution.getId().toString());
+                return Outcome.QUEUED;
+            } catch (RuntimeException exception) {
+                audit(instance, step, "SYSTEM_ACTION_FAILED", exception.getMessage());
+                return Outcome.FAILURE;
+            }
+        }
         String policy = Objects.toString(action.get("failurePolicy"), "STOP");
         int attempts = "RETRY".equals(policy)
                 ? Math.max(1, ((Number) action.getOrDefault("retryCount", 3)).intValue()) : 1;
@@ -48,13 +66,13 @@ public class WorkflowSystemActionExecutor {
             try {
                 executeOnce(instance, step, action, actionType, calculationRows);
                 audit(instance, step, "SYSTEM_ACTION_COMPLETED", actionType);
-                return true;
+                return Outcome.SUCCESS;
             } catch (RuntimeException exception) {
                 last = exception;
                 audit(instance, step, "SYSTEM_ACTION_FAILED", exception.getMessage());
             }
         }
-        return false;
+        return Outcome.FAILURE;
     }
 
     @SuppressWarnings("unchecked")

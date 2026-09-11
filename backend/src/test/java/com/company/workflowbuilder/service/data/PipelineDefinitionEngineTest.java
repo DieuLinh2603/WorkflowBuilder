@@ -140,6 +140,27 @@ class PipelineDefinitionEngineTest {
         assertThat(result.detectedSchema()).containsEntry("id","STRING").containsEntry("active","STRING");
     }
 
+    @Test void readsExcelUtf8BomAndAutoDetectsSemicolonDelimiter()throws Exception{
+        UUID sourceId=UUID.randomUUID();
+        when(files.findById(sourceId)).thenReturn(Optional.of(file("\uFEFFid;name\r\n1;Nguyen Van A")));
+        Map<String,Object> definition=Map.of("sources",List.of(Map.of("alias","people","type","CSV","fileVersionId",sourceId,"delimiter","AUTO")),"joins",List.of(),"transforms",List.of());
+
+        var result=engine.discover(pipeline(definition,List.of(),"id"),definition);
+
+        assertThat(result.records()).singleElement().satisfies(row -> assertThat(row)
+                .containsEntry("id","1").containsEntry("name","Nguyen Van A")
+                .doesNotContainKey("\uFEFFid"));
+    }
+
+    @Test void rejectsDuplicateCsvHeadersWithAUsefulMessage()throws Exception{
+        UUID sourceId=UUID.randomUUID();
+        when(files.findById(sourceId)).thenReturn(Optional.of(file("id,id\n1,2")));
+        Map<String,Object> definition=Map.of("sources",List.of(Map.of("alias","people","type","CSV","fileVersionId",sourceId)),"joins",List.of(),"transforms",List.of());
+
+        assertThatThrownBy(()->engine.discover(pipeline(definition,List.of(),"id"),definition))
+                .isInstanceOf(PipelineDefinitionEngine.StageException.class).hasMessageContaining("bị trùng");
+    }
+
     @Test void automaticallyFindsTheOnlyNestedRestArray()throws Exception{
         var root=mapper.readTree("{\"data\":{\"items\":[{\"id\":1}]},\"meta\":{\"page\":1}}");
         com.fasterxml.jackson.databind.JsonNode records=ReflectionTestUtils.invokeMethod(engine,"resolveRestRecords",root,"");

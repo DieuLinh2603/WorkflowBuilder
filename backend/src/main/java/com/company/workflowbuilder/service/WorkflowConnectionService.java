@@ -120,10 +120,9 @@ public class WorkflowConnectionService {
                             && connection.getType() == request.getType());
             if (duplicate)
                 throw new IllegalArgumentException("Review Step chỉ có tối đa một nhánh " + request.getType());
-        } else if (from.getType() == StepType.ASSIGNMENT || from.getType() == StepType.SYSTEM_ACTION) {
-            Set<ConnectionType> allowed = from.getType() == StepType.ASSIGNMENT ? assignmentTypes : systemTypes;
-            if (!allowed.contains(request.getType()))
-                throw new IllegalArgumentException(from.getType() + " chỉ hỗ trợ connection kết quả thành công hoặc thất bại");
+        } else if (from.getType() == StepType.ASSIGNMENT) {
+            if (!assignmentTypes.contains(request.getType()))
+                throw new IllegalArgumentException("Assignment chỉ hỗ trợ connection kết quả hoàn thành hoặc thất bại");
             if (!request.getClauses().isEmpty())
                 throw new IllegalArgumentException("Connection kết quả không chứa condition clauses");
             boolean duplicate = connections.findByFromStepId(from.getId()).stream()
@@ -131,6 +130,26 @@ public class WorkflowConnectionService {
                             && connection.getType() == request.getType());
             if (duplicate)
                 throw new IllegalArgumentException(from.getType() + " chỉ có tối đa một nhánh " + request.getType());
+        } else if (from.getType() == StepType.SYSTEM_ACTION) {
+            Set<ConnectionType> allowed = EnumSet.of(ConnectionType.SYSTEM_SUCCESS, ConnectionType.SYSTEM_FAIL,
+                    ConnectionType.IF, ConnectionType.ELSE);
+            if (!allowed.contains(request.getType()))
+                throw new IllegalArgumentException("System Action chỉ hỗ trợ nhánh thành công, điều kiện hoặc thất bại");
+            List<WorkflowConnection> existing = connections.findByFromStepId(from.getId()).stream()
+                    .filter(connection -> !connection.getId().equals(currentConnectionId)).toList();
+            if (systemTypes.contains(request.getType())) {
+                if (!request.getClauses().isEmpty())
+                    throw new IllegalArgumentException("Connection kết quả không chứa condition clauses");
+                if (existing.stream().anyMatch(connection -> connection.getType() == request.getType()))
+                    throw new IllegalArgumentException("System Action chỉ có tối đa một nhánh " + request.getType());
+            }
+            if (request.getType() == ConnectionType.SYSTEM_SUCCESS
+                    && existing.stream().anyMatch(connection -> connection.getType() == ConnectionType.IF
+                            || connection.getType() == ConnectionType.ELSE))
+                throw new IllegalArgumentException("Không thể dùng đồng thời nhánh Thành công và nhánh IF/ELSE");
+            if ((request.getType() == ConnectionType.IF || request.getType() == ConnectionType.ELSE)
+                    && existing.stream().anyMatch(connection -> connection.getType() == ConnectionType.SYSTEM_SUCCESS))
+                throw new IllegalArgumentException("Hãy xóa nhánh Thành công trước khi cấu hình IF/ELSE");
         } else if (approvalTypes.contains(request.getType()) || reviewTypes.contains(request.getType())
                 || assignmentTypes.contains(request.getType()) || systemTypes.contains(request.getType())) {
             throw new IllegalArgumentException(

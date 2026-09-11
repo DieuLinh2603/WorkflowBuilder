@@ -14,7 +14,8 @@ class SystemActionCalculationTest {
     private final WorkflowJsonCodec codec = new WorkflowJsonCodec(new ObjectMapper());
     private final WorkflowInstanceRepository instances = mock(WorkflowInstanceRepository.class);
     private final WorkflowSystemActionExecutor executor = new WorkflowSystemActionExecutor(instances,
-            mock(InstanceStepLogRepository.class), mock(NotificationCenterService.class), mock(NotificationStepDeliveryService.class), codec);
+            mock(InstanceStepLogRepository.class), mock(NotificationCenterService.class),
+            mock(NotificationStepDeliveryService.class), codec, mock(SystemActionQueueService.class));
 
     @Test void systemActionWritesNumericOutputsWithBatchTotals() {
         var instance = WorkflowInstance.builder().fieldSnapshot("{\"amount\":20}").build();

@@ -23,6 +23,7 @@ public class StepConfigService {
     private final CustomFieldDefinitionRepository fields;
     private final WorkflowAuthorizationService authorization;
     private final ObjectMapper mapper;
+    private final com.company.workflowbuilder.service.data.DataConnectorService connectorService;
 
     @Transactional
     public Map<String,Object> configureApproval(UUID workflowId, UUID stepId, ApprovalConfigRequest request) {
@@ -115,6 +116,12 @@ public class StepConfigService {
         WorkflowStep step = step(workflowId, stepId, StepType.SYSTEM_ACTION); authorization.requireEdit(step.getWorkflow());
         com.company.workflowbuilder.service.runtime.OutputCalculator.validate(request.getCalculatedOutputs());
         requireDraft(step);
+        if (request.getMappings() == null) request.setMappings(new ArrayList<>());
+        if (request.getQueryParams() == null) request.setQueryParams(new ArrayList<>());
+        if (request.getHeaders() == null) request.setHeaders(new ArrayList<>());
+        if (request.getResponseMappings() == null) request.setResponseMappings(new ArrayList<>());
+        if (request.getResponseSelection() == null)
+            request.setResponseSelection(new SystemActionConfigRequest.ResponseSelection());
         Set<String> fieldKeys = new HashSet<>();
         fields.findByStepWorkflowId(workflowId).forEach(field -> fieldKeys.add(field.getFieldKey()));
         for (SystemActionConfigRequest.Mapping mapping : request.getMappings()) {
@@ -131,10 +138,41 @@ public class StepConfigService {
                     throw new IllegalArgumentException("Cần ít nhất một cột output tính toán");
             }
             case API_CALL -> {
-                validateHttpUrl(request.getEndpointUrl());
                 if (!Set.of("GET", "POST", "PUT", "PATCH", "DELETE").contains(request.getHttpMethod().toUpperCase(Locale.ROOT)))
                     throw new IllegalArgumentException("HTTP method không được hỗ trợ");
                 request.setHttpMethod(request.getHttpMethod().toUpperCase(Locale.ROOT));
+                if (request.getConnectorId() == null) {
+                    validateHttpUrl(request.getEndpointUrl());
+                } else {
+                    var connector = connectorService.accessible(request.getConnectorId());
+                    if (!"REST".equals(connector.getConnectorType()))
+                        throw new IllegalArgumentException("System Action chỉ hỗ trợ REST connector");
+                    String path = Objects.toString(request.getPathTemplate(), "").trim();
+                    if (path.contains("://") || path.startsWith("//") || path.contains("#"))
+                        throw new IllegalArgumentException("API path phải tương đối với base URL của connector");
+                    Set<String> blocked = Set.of("authorization", "host", "content-length");
+                    for (SystemActionConfigRequest.NameValue header : request.getHeaders())
+                        if (blocked.contains(header.getName().trim().toLowerCase(Locale.ROOT)))
+                            throw new IllegalArgumentException("Header được connector quản lý: " + header.getName());
+                    for (SystemActionConfigRequest.ResponseMapping mapping : request.getResponseMappings()) {
+                        if (!mapping.getJsonPath().startsWith("$"))
+                            throw new IllegalArgumentException("JSONPath phải bắt đầu bằng $");
+                        if (!fieldKeys.contains(mapping.getTargetField()))
+                            throw new IllegalArgumentException("Response target field không tồn tại trong workflow: " + mapping.getTargetField());
+                    }
+                    var selection = request.getResponseSelection();
+                    String selectionMode = Objects.toString(selection.getMode(), "ROOT").toUpperCase(Locale.ROOT);
+                    if (!Set.of("ROOT", "FIRST", "LAST", "FILTER_FIRST", "FILTER_LAST").contains(selectionMode))
+                        throw new IllegalArgumentException("Chế độ chọn response không được hỗ trợ");
+                    selection.setMode(selectionMode);
+                    if (!"ROOT".equals(selectionMode)) {
+                        if (selection.getCollectionJsonPath() == null || !selection.getCollectionJsonPath().startsWith("$"))
+                            throw new IllegalArgumentException("JSONPath danh sách response phải bắt đầu bằng $");
+                        if (selectionMode.startsWith("FILTER_")
+                                && (selection.getFilterJsonPath() == null || !selection.getFilterJsonPath().startsWith("$")))
+                            throw new IllegalArgumentException("JSONPath lọc response phải bắt đầu bằng $");
+                    }
+                }
             }
             case SEND_NOTIFICATION -> {
                 if (request.getNotificationTitle() == null || request.getNotificationTitle().isBlank()

@@ -1,11 +1,13 @@
 package com.company.workflowbuilder.service;
 
+import com.company.workflowbuilder.dto.request.WorkflowMetadataUpdateRequest;
 import com.company.workflowbuilder.dto.response.WorkflowResponse;
 import com.company.workflowbuilder.entity.user.SystemRole;
 import com.company.workflowbuilder.entity.user.User;
 import com.company.workflowbuilder.entity.workflow.Workflow;
 import com.company.workflowbuilder.entity.workflow.WorkflowStatus;
 import com.company.workflowbuilder.exception.ResourceNotFoundException;
+import com.company.workflowbuilder.exception.DuplicateResourceException;
 import com.company.workflowbuilder.repository.*;
 import com.company.workflowbuilder.service.workflow.WorkflowDefinitionAnalysis;
 import com.company.workflowbuilder.service.workflow.WorkflowQueryUseCase;
@@ -161,6 +163,38 @@ class WorkflowEditorAccessTest {
         assertEquals(java.util.List.of(eligible.getId()), service.editorCandidates(workflow.getId()).stream()
                 .map(com.company.workflowbuilder.dto.response.WorkflowEditorResponse::getId).toList());
         verify(authorization).requireOwnerOrAdmin(workflow);
+    }
+
+    @Test
+    void scopedEditorCanUpdateDraftNameAndDescription() {
+        Workflow workflow = workflow(user("owner@company.com", SystemRole.WORKFLOW_OWNER), WorkflowStatus.DRAFT);
+        workflow.setModule("HR");
+        when(workflows.findById(workflow.getId())).thenReturn(Optional.of(workflow));
+        WorkflowMetadataUpdateRequest request = new WorkflowMetadataUpdateRequest();
+        request.setName("  Onboarding nhân viên  ");
+        request.setDescription("  Quy trình tiếp nhận nhân sự mới  ");
+
+        service.updateMetadata(workflow.getId(), request);
+
+        assertEquals("Onboarding nhân viên", workflow.getName());
+        assertEquals("Quy trình tiếp nhận nhân sự mới", workflow.getDescription());
+        verify(authorization).requireEdit(workflow);
+        verify(workflows).save(workflow);
+    }
+
+    @Test
+    void updateMetadataRejectsNameUsedByAnotherWorkflowFamily() {
+        Workflow workflow = workflow(user("owner@company.com", SystemRole.WORKFLOW_OWNER), WorkflowStatus.DRAFT);
+        workflow.setModule("HR");
+        when(workflows.findById(workflow.getId())).thenReturn(Optional.of(workflow));
+        when(workflows.existsByModuleAndVersionAndNameIgnoreCaseAndFamilyIdNot(
+                "HR", "1.0", "Onboarding", workflow.getFamilyId())).thenReturn(true);
+        WorkflowMetadataUpdateRequest request = new WorkflowMetadataUpdateRequest();
+        request.setName("Onboarding");
+
+        assertThrows(DuplicateResourceException.class,
+                () -> service.updateMetadata(workflow.getId(), request));
+        verify(workflows, never()).save(any());
     }
 
     private User user(String email, SystemRole role) {

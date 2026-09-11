@@ -121,6 +121,16 @@ export default function useWorkflowDesigner() {
     return updated;
   };
 
+  const updateWorkflowMetadata = async (workflowId, data) => {
+    const res = await apiFetch(`/api/workflows/${workflowId}/metadata`, {
+      method: 'PUT', body: JSON.stringify(data), successMessage: 'Đã cập nhật thông tin workflow.'
+    });
+    if (!res.ok) throw new Error(await apiError(res, 'Không thể cập nhật thông tin workflow'));
+    const updated = await res.json();
+    setWorkflow(updated);
+    return updated;
+  };
+
   // ── Validate ──
   const validateWorkflow = async (workflowId) => {
     const res = await apiFetch(`/api/workflows/${workflowId}/validate`, { method: 'POST' });
@@ -179,6 +189,7 @@ export default function useWorkflowDesigner() {
     loadWorkflow,
     addStep,
     updateStep,
+    updateWorkflowMetadata,
     deleteStep,
     saveLayout,
     validateWorkflow

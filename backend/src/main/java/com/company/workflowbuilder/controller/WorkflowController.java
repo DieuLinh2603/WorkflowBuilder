@@ -1,6 +1,7 @@
 package com.company.workflowbuilder.controller;
 
 import com.company.workflowbuilder.dto.request.WorkflowCreateRequest;
+import com.company.workflowbuilder.dto.request.WorkflowMetadataUpdateRequest;
 import com.company.workflowbuilder.dto.response.WorkflowResponse;
 import com.company.workflowbuilder.dto.response.WorkflowStepResponse;
 import com.company.workflowbuilder.dto.response.CustomFieldResponse;
@@ -63,6 +64,14 @@ public class WorkflowController {
     @Operation(summary = "Get workflow detail by ID")
     public ResponseEntity<WorkflowResponse> getWorkflow(@PathVariable UUID id) {
         return ResponseEntity.ok(workflowService.getWorkflowById(id));
+    }
+
+    @PutMapping("/{id}/metadata")
+    @PreAuthorize("hasAnyRole('ADMIN', 'WORKFLOW_OWNER', 'EDITOR', 'VIEWER')")
+    @Operation(summary = "Update the name and description of a workflow draft")
+    public ResponseEntity<WorkflowResponse> updateMetadata(@PathVariable UUID id,
+            @Valid @RequestBody WorkflowMetadataUpdateRequest request) {
+        return ResponseEntity.ok(workflowService.updateMetadata(id, request));
     }
 
     @GetMapping("/{id}/active")

@@ -270,14 +270,17 @@ export default function PipelineDesignerPage() {
   }); };
   const uploadCsv = async index => {
     const source = definition.sources[index], file = files[index];
+    if (!source.alias?.trim()) return setError('Vui lòng nhập tên gợi nhớ trước khi tải file CSV.');
+    if (!/^[a-zA-Z][a-zA-Z0-9_]{0,99}$/.test(source.alias.trim())) return setError('Tên gợi nhớ phải bắt đầu bằng chữ và chỉ gồm chữ, số, dấu gạch dưới.');
     if (!file) return setError('Vui lòng chọn một file CSV.');
+    if (!file.name.toLowerCase().endsWith('.csv')) return setError('Chỉ chấp nhận file có phần mở rộng .csv.');
     setBusy(`upload-${index}`); setError('');
     try {
       const body = new FormData(); body.append('file', file);
       const response = await apiFetch(`/api/pipelines/${id}/files?alias=${encodeURIComponent(source.alias)}`, { method: 'POST', body });
       if (!response.ok) throw new Error(await apiError(response));
       const uploaded = await response.json();
-      updateSource(index, { fileVersionId: uploaded.id, fileName: uploaded.fileName, delimiter: source.delimiter || ',' });
+      updateSource(index, { fileVersionId: uploaded.id, fileName: uploaded.fileName, delimiter: source.delimiter || 'AUTO' });
     } catch (reason) { setError(reason.message); } finally { setBusy(''); }
   };
   const addJoin = () => setDefinition(current => ({ ...current, joins: [...current.joins, { rightAlias: current.sources[1]?.alias || '', type: 'INNER', leftKeys: [], rightKeys: [], cardinality: 'ONE_TO_ONE' }] }));

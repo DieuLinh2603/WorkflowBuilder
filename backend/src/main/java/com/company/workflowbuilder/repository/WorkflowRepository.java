@@ -28,4 +28,7 @@ public interface WorkflowRepository extends JpaRepository<Workflow, UUID> {
     boolean existsByOwnerIdAndModuleAndStatusNotIn(UUID ownerId, String module, java.util.Collection<WorkflowStatus> statuses);
 
     boolean existsByModuleAndVersionAndNameIgnoreCase(String module, String version, String name);
+
+    boolean existsByModuleAndVersionAndNameIgnoreCaseAndFamilyIdNot(
+            String module, String version, String name, UUID familyId);
 }
