@@ -4,7 +4,9 @@ import com.company.workflowbuilder.entity.user.User;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -15,7 +17,8 @@ public class DataConnector {
     @Column(nullable=false,unique=true) private String name;
     @Column(columnDefinition="TEXT") private String description;
     @Column(name="connector_type",nullable=false) private String connectorType;
-    @Column(name="config_json",nullable=false,columnDefinition="TEXT") @Builder.Default private String configJson="{}";
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name="config_json",nullable=false,columnDefinition="jsonb") @Builder.Default private String configJson="{}";
     @Column(name="encrypted_credentials",columnDefinition="TEXT") private String encryptedCredentials;
     @Column(nullable=false) @Builder.Default private boolean active=true;
     @ManyToOne(fetch=FetchType.LAZY) @JoinColumn(name="created_by",nullable=false) private User createdBy;

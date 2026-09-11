@@ -4,7 +4,9 @@ import com.company.workflowbuilder.entity.user.User;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 import java.time.*;
 import java.util.UUID;
 
@@ -16,8 +18,10 @@ public class DataPipeline {
  @Column(columnDefinition="TEXT") private String description;
  @ManyToOne(fetch=FetchType.LAZY) @JoinColumn(name="owner_id",nullable=false) private User owner;
  @Column(nullable=false) @Builder.Default private String status="DRAFT";
- @Column(name="definition_json",nullable=false,columnDefinition="TEXT") @Builder.Default private String definitionJson="{}";
- @Column(name="output_schema_json",nullable=false,columnDefinition="TEXT") @Builder.Default private String outputSchemaJson="[]";
+ @JdbcTypeCode(SqlTypes.JSON)
+ @Column(name="definition_json",nullable=false,columnDefinition="jsonb") @Builder.Default private String definitionJson="{}";
+ @JdbcTypeCode(SqlTypes.JSON)
+ @Column(name="output_schema_json",nullable=false,columnDefinition="jsonb") @Builder.Default private String outputSchemaJson="[]";
  @Column(name="business_key",nullable=false) private String businessKey;
  @Column(name="schedule_type",nullable=false) @Builder.Default private String scheduleType="MANUAL";
  @Column(name="scheduled_at") private LocalDateTime scheduledAt;

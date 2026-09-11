@@ -5,7 +5,9 @@ import com.company.workflowbuilder.entity.workflow.Workflow;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -33,7 +35,8 @@ public class RequestDraft {
     @JoinColumn(name = "workflow_version_id", nullable = false)
     private Workflow workflowVersion;
 
-    @Column(name = "field_snapshot", nullable = false, columnDefinition = "TEXT")
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "field_snapshot", nullable = false, columnDefinition = "jsonb")
     @Builder.Default
     private String fieldSnapshot = "{}";
 
