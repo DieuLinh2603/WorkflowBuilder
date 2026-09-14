@@ -23,12 +23,19 @@ import java.util.Comparator;
 import java.util.Map;
 
 @Component
-@RequiredArgsConstructor(onConstructor_ = @org.springframework.beans.factory.annotation.Autowired)
 public class WorkflowViewMapper {
     private final ObjectMapper expressionMapper = new ObjectMapper();
     private final WorkflowAuthorizationService authorization;
     private final CurrentUserService currentUser;
     private final WorkflowMetadataService metadata;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public WorkflowViewMapper(WorkflowAuthorizationService authorization, CurrentUserService currentUser,
+            WorkflowMetadataService metadata) {
+        this.authorization = authorization;
+        this.currentUser = currentUser;
+        this.metadata = metadata;
+    }
 
     /** Kept for unit tests and integrations compiled against the pre-metadata mapper. */
     public WorkflowViewMapper(WorkflowAuthorizationService authorization, CurrentUserService currentUser) {

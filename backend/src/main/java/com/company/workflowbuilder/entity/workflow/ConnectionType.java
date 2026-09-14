@@ -7,5 +7,9 @@ public enum ConnectionType {
     APPROVE,
     REJECT,
     REVIEW_PASS,
-    REVIEW_FAIL
+    REVIEW_FAIL,
+    ASSIGNMENT_DONE,
+    ASSIGNMENT_FAIL,
+    SYSTEM_SUCCESS,
+    SYSTEM_FAIL
 }

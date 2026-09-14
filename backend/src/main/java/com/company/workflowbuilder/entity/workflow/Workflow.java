@@ -1,5 +1,6 @@
 package com.company.workflowbuilder.entity.workflow;
 
+import com.company.workflowbuilder.entity.form.FormVersion;
 import com.company.workflowbuilder.entity.user.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -34,11 +35,18 @@ public class Workflow {
 
     private String type;
 
+    @Column(name = "custom_type_name")
+    private String customTypeName;
+
     private String module;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "owner_id", nullable = false)
     private User owner;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "form_version_id")
+    private FormVersion formVersion;
 
     @Column(nullable = false)
     @Builder.Default

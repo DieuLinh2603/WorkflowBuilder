@@ -84,15 +84,6 @@ public class WorkflowInstance {
     @Builder.Default
     private boolean requesterWithdrawalAllowed = true;
 
-    /**
-     * Form version đang gắn vào Start Step tại thời điểm instance được tạo.
-     * Dùng để render đúng field labels/types khi xem ticket cũ (audit trail).
-     * Nullable: các instance cũ (trước khi có Form Builder) không có form.
-     */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "form_version_id")
-    private FormVersion formVersion;
-
     @Version
     private Long lockVersion;
 }

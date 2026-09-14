@@ -37,7 +37,6 @@ import java.util.*;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor(onConstructor_ = @org.springframework.beans.factory.annotation.Autowired)
 public class WorkflowService {
 
     private final WorkflowRepository workflowRepository;
@@ -54,6 +53,30 @@ public class WorkflowService {
     private final WorkflowDefinitionAnalysis definitionAnalysis;
     private final WorkflowQueryUseCase queries;
     private final WorkflowMetadataService metadata;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public WorkflowService(WorkflowRepository workflowRepository, WorkflowStepRepository workflowStepRepository,
+            UserRepository userRepository, WorkflowConnectionRepository connectionRepository,
+            CustomFieldDefinitionRepository fieldRepository, CurrentUserService currentUser,
+            WorkflowAuthorizationService authorization, WorkflowValidationService validationService,
+            WorkflowAudienceRepository audienceRepository, WorkflowInstanceRepository instanceRepository,
+            WorkflowViewMapper viewMapper, WorkflowDefinitionAnalysis definitionAnalysis, WorkflowQueryUseCase queries,
+            WorkflowMetadataService metadata) {
+        this.workflowRepository = workflowRepository;
+        this.workflowStepRepository = workflowStepRepository;
+        this.userRepository = userRepository;
+        this.connectionRepository = connectionRepository;
+        this.fieldRepository = fieldRepository;
+        this.currentUser = currentUser;
+        this.authorization = authorization;
+        this.validationService = validationService;
+        this.audienceRepository = audienceRepository;
+        this.instanceRepository = instanceRepository;
+        this.viewMapper = viewMapper;
+        this.definitionAnalysis = definitionAnalysis;
+        this.queries = queries;
+        this.metadata = metadata;
+    }
 
     /** Backward-compatible constructor used by focused unit tests. */
     public WorkflowService(WorkflowRepository workflowRepository, WorkflowStepRepository workflowStepRepository,

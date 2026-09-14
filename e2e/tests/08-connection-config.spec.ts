@@ -17,10 +17,10 @@ test.describe('Scenario Group 8: Connection Configuration Modal', () => {
     // Modal opens
     await expect(designerPage.getByRole('heading', { name: /cấu hình connection|chỉnh sửa connection/i })).toBeVisible();
 
-    // Switch to IF type if not already
-    const ifChoice = designerPage.locator('button').filter({ hasText: /^IF$/i });
-    if (await ifChoice.isVisible()) {
-      await ifChoice.click();
+    // Switch to IF type
+    const typeSelect = designerPage.getByLabel(/Loại connection/i);
+    if (await typeSelect.isVisible()) {
+      await typeSelect.selectOption('IF');
     }
 
     // Verify CollapsibleNote with GitBranch icon
@@ -52,24 +52,21 @@ test.describe('Scenario Group 8: Connection Configuration Modal', () => {
     await designerPage.reload();
     await doubleClickConnection(designerPage);
 
-    // Click IF
-    const ifChoice = designerPage.locator('button').filter({ hasText: /^IF$/i });
-    if (await ifChoice.isVisible()) {
-      await ifChoice.click();
-    }
+    // Select IF
+    await designerPage.getByLabel(/Loại connection/i).selectOption('IF');
 
-    // Click "Thêm điều kiện"
-    const addClauseBtn = designerPage.getByRole('button', { name: /Thêm điều kiện/i });
-    if (await addClauseBtn.isVisible()) {
-      await addClauseBtn.click();
+    // Fill clause expectedValue so save is enabled
+    const valueInput = designerPage.locator('input[placeholder="Nhập giá trị"]');
+    if (await valueInput.isVisible()) {
+      await valueInput.fill('1000000');
     }
 
     // Verify live preview section
     await expect(designerPage.getByText(/Bản xem trước logic/i)).toBeVisible();
     await expect(designerPage.getByText(/NẾU \(IF\)/i)).toBeVisible();
 
-    // Save
-    const saveBtn = designerPage.getByRole('button', { name: /Lưu connection/i });
+    // Save with Áp dụng
+    const saveBtn = designerPage.getByRole('button', { name: /Áp dụng/i });
     await saveBtn.click();
   });
 
@@ -80,7 +77,8 @@ test.describe('Scenario Group 8: Connection Configuration Modal', () => {
     await designerPage.reload();
     await doubleClickConnection(designerPage);
 
-    // Click "Xóa connection"
+    // Click "Xóa connection" with dialog accept
+    designerPage.once('dialog', dialog => dialog.accept());
     const deleteBtn = designerPage.getByRole('button', { name: /Xóa connection/i });
     await expect(deleteBtn).toBeVisible();
     await deleteBtn.click();

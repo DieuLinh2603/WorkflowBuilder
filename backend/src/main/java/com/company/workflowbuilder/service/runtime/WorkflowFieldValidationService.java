@@ -26,13 +26,22 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor(onConstructor_ = @org.springframework.beans.factory.annotation.Autowired)
 public class WorkflowFieldValidationService {
     private final CustomFieldDefinitionRepository fields;
     private final UserRepository users;
     private final ObjectMapper objectMapper;
     private final FormFieldRepository formFields;
     private final WorkflowStepRepository steps;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public WorkflowFieldValidationService(CustomFieldDefinitionRepository fields, UserRepository users,
+            ObjectMapper objectMapper, FormFieldRepository formFields, WorkflowStepRepository steps) {
+        this.fields = fields;
+        this.users = users;
+        this.objectMapper = objectMapper;
+        this.formFields = formFields;
+        this.steps = steps;
+    }
 
     /** Backwards-compatible constructor used by focused unit tests. */
     public WorkflowFieldValidationService(CustomFieldDefinitionRepository fields) {
