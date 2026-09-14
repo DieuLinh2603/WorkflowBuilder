@@ -14,9 +14,8 @@ import java.util.UUID;
  * User entity — represents an account in the system.
  * Accounts are created by Admin (no self sign-up).
  *
- * A user CAN have zero SystemRoles — in that case they are an
- * "Approver-only" user who can only act on steps they are assigned to
- * via StepActorRule at runtime.
+ * Every account created or updated through the API must have a system role.
+ * StepActorRule assigns approver, reviewer and assignee responsibilities.
  */
 @Entity
 @Table(name = "users")
@@ -65,7 +64,7 @@ public class User {
 
     /**
      * SystemRoles stored as @ElementCollection in user_system_role table.
-     * Can be empty — "Approver-only" users have no system-level access.
+     * Must contain at least one role for accounts created or updated through the API.
      */
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "user_system_role", joinColumns = @JoinColumn(name = "user_id"))
@@ -73,6 +72,12 @@ public class User {
     @Column(name = "role")
     @Builder.Default
     private Set<SystemRole> systemRoles = new HashSet<>();
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "user_module_memberships", joinColumns = @JoinColumn(name = "user_id"))
+    @Column(name = "module_code")
+    @Builder.Default
+    private Set<String> moduleCodes = new HashSet<>();
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

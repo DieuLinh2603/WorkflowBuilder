@@ -19,6 +19,8 @@ public class ReviewConfigRequest {
     private ApprovalConfigRequest.DynamicActorSource dynamicActorSource;
     private String reviewContent = "REQUEST_CONTENT";
     private boolean commentRequired;
+    private boolean forwardReviewHandoff;
+    private List<com.company.workflowbuilder.dto.CalculatedOutput> calculatedOutputs = new ArrayList<>();
     private ResultMode resultMode = ResultMode.REQUIRE_APPROVAL;
     private Integer deadlineHours;
     private LocalDate deadlineDate;

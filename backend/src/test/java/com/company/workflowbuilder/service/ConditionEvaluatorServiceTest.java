@@ -61,6 +61,45 @@ class ConditionEvaluatorServiceTest {
         assertFalse(service.matches(connection, Map.of("revenue", 100, "cost", 70, "minimumProfit", 50)));
     }
 
+    @Test void evaluatesIndependentConditionGroups() {
+        String expression = """
+                {"type":"OR","builderMode":"CONDITION_GROUPS","children":[
+                  {"type":"AND","children":[
+                    {"type":"COMPARE","operator":"GT","left":{"type":"FIELD","fieldKey":"amount"},"right":{"type":"VALUE","value":"100"}},
+                    {"type":"COMPARE","operator":"EQ","left":{"type":"FIELD","fieldKey":"department"},"right":{"type":"VALUE","value":"IT"}}]},
+                  {"type":"AND","children":[
+                    {"type":"COMPARE","operator":"EQ","left":{"type":"FIELD","fieldKey":"priority"},"right":{"type":"VALUE","value":"HIGH"}},
+                    {"type":"COMPARE","operator":"EQ","left":{"type":"FIELD","fieldKey":"active"},"right":{"type":"VALUE","value":"true"}}]}
+                ]}
+                """;
+        WorkflowConnection connection = connection(LogicalOperator.AND,
+                WorkflowConditionClause.builder().expressionJson(expression).build());
+
+        assertTrue(service.matches(connection, Map.of("amount", 150, "department", "IT", "priority", "LOW", "active", false)));
+        assertTrue(service.matches(connection, Map.of("amount", 50, "department", "HR", "priority", "HIGH", "active", true)));
+        assertFalse(service.matches(connection, Map.of("amount", 150, "department", "HR", "priority", "HIGH", "active", false)));
+    }
+
+    @Test void combinesBasicConditionsAndCalculationOnOneIfConnection() {
+        String expression = """
+                {"type":"AND","builderMode":"COMBINED_CONDITION","children":[
+                  {"type":"AND","builderMode":"CONDITION_GROUPS","children":[
+                    {"type":"AND","children":[
+                      {"type":"COMPARE","operator":"EQ","left":{"type":"FIELD","fieldKey":"department"},"right":{"type":"VALUE","value":"IT"}}]}]},
+                  {"type":"COMPARE","operator":"GTE",
+                   "left":{"type":"SUBTRACT","operands":[
+                     {"type":"FIELD","fieldKey":"revenue"},{"type":"FIELD","fieldKey":"cost"}]},
+                   "right":{"type":"VALUE","value":50}}
+                ]}
+                """;
+        WorkflowConnection connection = connection(LogicalOperator.AND,
+                WorkflowConditionClause.builder().expressionJson(expression).build());
+
+        assertTrue(service.matches(connection, Map.of("department", "IT", "revenue", 120, "cost", 60)));
+        assertFalse(service.matches(connection, Map.of("department", "HR", "revenue", 120, "cost", 60)));
+        assertFalse(service.matches(connection, Map.of("department", "IT", "revenue", 100, "cost", 60)));
+    }
+
     private WorkflowConnection connection(LogicalOperator logical, WorkflowConditionClause... clauses) {
         return WorkflowConnection.builder().type(ConnectionType.IF).logicalOperator(logical).clauses(new ArrayList<>(List.of(clauses))).build();
     }

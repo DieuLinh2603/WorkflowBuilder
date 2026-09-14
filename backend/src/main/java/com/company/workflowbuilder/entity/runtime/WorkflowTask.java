@@ -5,6 +5,8 @@ import com.company.workflowbuilder.entity.workflow.WorkflowStep;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.*;
 import java.util.UUID;
 
@@ -19,5 +21,9 @@ public class WorkflowTask {
     @Enumerated(EnumType.STRING) @Column(nullable=false) @Builder.Default private TaskStatus status=TaskStatus.PENDING;
     @Column(name="deadline_at") private LocalDateTime deadlineAt;
     @Column(name="completed_at") private LocalDateTime completedAt;
+    @Column(name="review_results", columnDefinition="text") private String reviewResults;
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name="review_handoff", columnDefinition="jsonb") private String reviewHandoff;
+    @Column(name="calculated_results", columnDefinition="text") private String calculatedResults;
     @CreationTimestamp @Column(name="created_at",nullable=false,updatable=false) private LocalDateTime createdAt;
 }

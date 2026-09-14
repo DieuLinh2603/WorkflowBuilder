@@ -161,7 +161,7 @@ export default function UsersPage() {
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="text-xs font-semibold text-gray-500 uppercase border-b border-gray-200 bg-white sticky top-0 z-10">
-              <th className="py-3 px-4">AVATAR + TÊN</th>
+              <th className="py-3 px-4">TÊN HIỂN THỊ</th>
               <th className="py-3 px-4">EMAIL</th>
               <th className="py-3 px-4">CHỨC DANH</th>
               <th className="py-3 px-4">QUẢN LÝ TRỰC TIẾP</th>
@@ -193,7 +193,7 @@ export default function UsersPage() {
                       </span>
                   )) : (
                       <span className="px-2.5 py-1 rounded-md text-xs font-semibold bg-gray-100 text-gray-600">
-                        Approver-only
+                        Chưa gán role
                       </span>
                   )}
                 </td>

@@ -28,6 +28,7 @@ public class UserResponse {
     private String dataSource;
     private boolean active;
     private Set<SystemRole> systemRoles;
+    private Set<String> moduleCodes;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

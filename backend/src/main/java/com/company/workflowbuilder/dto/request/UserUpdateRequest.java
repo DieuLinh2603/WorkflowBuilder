@@ -2,6 +2,7 @@ package com.company.workflowbuilder.dto.request;
 
 import com.company.workflowbuilder.entity.user.SystemRole;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -23,10 +24,10 @@ public class UserUpdateRequest {
 
     private UUID managerId;
 
-    /**
-     * If provided, replaces the current system roles entirely.
-     */
+    @NotEmpty(message = "At least one system role is required")
     private Set<SystemRole> systemRoles;
+
+    private Set<String> moduleCodes;
 
     /**
      * Optional: reset password. Null means keep current password.

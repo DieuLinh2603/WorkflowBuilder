@@ -17,8 +17,9 @@ public class WorkflowAuthorizationService {
     private final UserGroupRepository groups;
 
     public boolean canView(Workflow workflow) {
-        return currentUser.hasRole(SystemRole.ADMIN)
-                || workflow.getOwner().getId().equals(currentUser.id())
+        if (currentUser.hasRole(SystemRole.ADMIN)) return true;
+        if (!hasModuleAccess(workflow)) return false;
+        return workflow.getOwner().getId().equals(currentUser.id())
                 || workflow.getEditors().stream().anyMatch(u -> u.getId().equals(currentUser.id()))
                 || canSubmit(workflow);
     }
@@ -26,6 +27,7 @@ public class WorkflowAuthorizationService {
     public boolean canSubmit(Workflow workflow) {
         if (workflow.getStatus() != WorkflowStatus.PUBLISHED)
             return false;
+        if (!hasModuleAccess(workflow)) return false;
         List<WorkflowAudience> rules = audiences.findByWorkflowId(workflow.getId());
         if (rules.isEmpty() || rules.stream().anyMatch(a -> a.getSubjectType() == AudienceType.ALL_ACTIVE))
             return true;
@@ -43,13 +45,13 @@ public class WorkflowAuthorizationService {
     public boolean canEdit(Workflow workflow) {
         return workflow.getStatus() == com.company.workflowbuilder.entity.workflow.WorkflowStatus.DRAFT
                 && (currentUser.hasRole(SystemRole.ADMIN)
-                        || workflow.getOwner().getId().equals(currentUser.id())
-                        || workflow.getEditors().stream().anyMatch(u -> u.getId().equals(currentUser.id())));
+                        || (hasModuleAccess(workflow) && (workflow.getOwner().getId().equals(currentUser.id())
+                        || workflow.getEditors().stream().anyMatch(u -> u.getId().equals(currentUser.id())))));
     }
 
     public boolean canPublish(Workflow workflow) {
         return currentUser.hasRole(SystemRole.ADMIN)
-                || workflow.getOwner().getId().equals(currentUser.id());
+                || (hasModuleAccess(workflow) && workflow.getOwner().getId().equals(currentUser.id()));
     }
 
     public void requireView(Workflow workflow) {
@@ -65,5 +67,10 @@ public class WorkflowAuthorizationService {
     public void requireOwnerOrAdmin(Workflow workflow) {
         if (!canPublish(workflow))
             throw new AccessDeniedException("Workflow owner or admin is required");
+    }
+
+    private boolean hasModuleAccess(Workflow workflow) {
+        if (currentUser.hasRole(SystemRole.ADMIN)) return true;
+        return currentUser.user().getModuleCodes().contains(workflow.getModule());
     }
 }

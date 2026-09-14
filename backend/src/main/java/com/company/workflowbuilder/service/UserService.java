@@ -4,10 +4,14 @@ import com.company.workflowbuilder.dto.request.UserCreateRequest;
 import com.company.workflowbuilder.dto.request.UserUpdateRequest;
 import com.company.workflowbuilder.dto.response.UserResponse;
 import com.company.workflowbuilder.entity.user.User;
+import com.company.workflowbuilder.entity.user.SystemRole;
+import com.company.workflowbuilder.entity.workflow.WorkflowStatus;
 import com.company.workflowbuilder.exception.DuplicateResourceException;
 import com.company.workflowbuilder.exception.ResourceNotFoundException;
 import com.company.workflowbuilder.mapper.UserMapper;
 import com.company.workflowbuilder.repository.UserRepository;
+import com.company.workflowbuilder.repository.BusinessModuleRepository;
+import com.company.workflowbuilder.repository.WorkflowRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -24,6 +28,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -33,6 +38,8 @@ public class UserService {
     private final UserRepository userRepository;
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
+    private final BusinessModuleRepository moduleRepository;
+    private final WorkflowRepository workflowRepository;
 
     @Transactional(readOnly = true)
     public Page<com.company.workflowbuilder.dto.response.UserListItemResponse> getAllUsers(
@@ -82,6 +89,7 @@ public class UserService {
 
     @Transactional
     public UserResponse createUser(UserCreateRequest request) {
+        Set<String> moduleCodes = validateModuleCodes(request.getSystemRoles(), request.getModuleCodes());
         // Check duplicate email
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new DuplicateResourceException(
@@ -98,6 +106,7 @@ public class UserService {
                 .systemRoles(request.getSystemRoles() != null
                         ? request.getSystemRoles()
                         : new HashSet<>())
+                .moduleCodes(moduleCodes)
                 .build();
 
         // Set manager if provided
@@ -114,6 +123,16 @@ public class UserService {
     @Transactional
     public UserResponse updateUser(UUID id, UserUpdateRequest request) {
         User user = findUserOrThrow(id);
+        Set<String> moduleCodes = validateModuleCodes(request.getSystemRoles(), request.getModuleCodes());
+        Set<String> removedModules = new HashSet<>(user.getModuleCodes());
+        removedModules.removeAll(moduleCodes);
+        for (String code : removedModules) {
+            if (workflowRepository.existsByOwnerIdAndModuleAndStatusNotIn(id, code,
+                    List.of(WorkflowStatus.ARCHIVED, WorkflowStatus.DELETED))) {
+                throw new IllegalStateException("Không thể gỡ module " + code
+                        + " khi người dùng còn sở hữu workflow đang hoạt động");
+            }
+        }
 
         user.setDisplayName(request.getDisplayName());
         user.setJobTitle(request.getJobTitle());
@@ -133,6 +152,7 @@ public class UserService {
         if (request.getSystemRoles() != null) {
             user.setSystemRoles(request.getSystemRoles());
         }
+        user.setModuleCodes(moduleCodes);
 
         // Reset password if provided
         if (StringUtils.hasText(request.getNewPassword())) {
@@ -164,5 +184,20 @@ public class UserService {
     private User findUserOrThrow(UUID id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
+    }
+
+    private Set<String> validateModuleCodes(Set<SystemRole> roles, Set<String> requestedCodes) {
+        Set<String> codes = requestedCodes == null ? new HashSet<>() : requestedCodes.stream()
+                .filter(java.util.Objects::nonNull).map(value -> value.trim().toUpperCase())
+                .collect(java.util.stream.Collectors.toCollection(HashSet::new));
+        boolean admin = roles != null && roles.contains(SystemRole.ADMIN);
+        if (!admin && codes.isEmpty()) {
+            throw new IllegalArgumentException("User không phải Admin phải thuộc ít nhất một module");
+        }
+        long validCount = moduleRepository.findByCodeInAndActiveTrueOrderBySortOrderAscNameAsc(codes).size();
+        if (validCount != codes.size()) {
+            throw new IllegalArgumentException("Danh sách module có mã không tồn tại hoặc đã ngừng hoạt động");
+        }
+        return codes;
     }
 }

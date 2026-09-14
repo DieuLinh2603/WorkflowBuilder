@@ -1,6 +1,7 @@
 package com.company.workflowbuilder.dto.response;
 
 import com.company.workflowbuilder.entity.field.FieldType;
+import com.company.workflowbuilder.dto.FieldOption;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -20,4 +21,6 @@ public class CustomFieldResponse {
     private boolean required;
     private String placeholder;
     private int displayOrder;
+    private java.util.List<FieldOption> options;
+    private boolean allowMultiple;
 }

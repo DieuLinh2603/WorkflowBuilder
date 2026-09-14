@@ -37,13 +37,38 @@ class StepConfigServiceApprovalModeTest {
         fields = mock(CustomFieldDefinitionRepository.class);
         users = mock(UserRepository.class);
         service = new StepConfigService(steps, users, fields,
-                mock(WorkflowAuthorizationService.class), new ObjectMapper());
+                mock(WorkflowAuthorizationService.class), new ObjectMapper(),
+                mock(com.company.workflowbuilder.service.data.DataConnectorService.class));
         workflow = Workflow.builder().id(UUID.randomUUID()).name("Purchase")
                 .status(WorkflowStatus.DRAFT).familyId(UUID.randomUUID()).build();
         approval = WorkflowStep.builder().id(UUID.randomUUID()).workflow(workflow)
                 .type(StepType.APPROVAL).label("Approve purchase").build();
         when(steps.findById(approval.getId())).thenReturn(Optional.of(approval));
         when(steps.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    @Test
+    void savesCalculationActionAndRejectsInvalidFormula() {
+        approval.setType(StepType.SYSTEM_ACTION);
+        var request = new com.company.workflowbuilder.dto.request.SystemActionConfigRequest();
+        request.setActionType(com.company.workflowbuilder.dto.request.SystemActionConfigRequest.ActionType.CALCULATE_OUTPUT);
+        request.setCalculatedOutputs(List.of(new com.company.workflowbuilder.dto.CalculatedOutput("total", "Tổng", "SUM([amount])")));
+        var config = service.configureSystemAction(workflow.getId(), approval.getId(), request);
+        assertEquals("CALCULATE_OUTPUT", config.get("actionType"));
+        assertTrue(approval.getConfigJson().contains("SUM([amount])"));
+        request.setCalculatedOutputs(List.of(new com.company.workflowbuilder.dto.CalculatedOutput("total", "Tổng", "[amount] +")));
+        assertThrows(IllegalArgumentException.class, () -> service.configureSystemAction(workflow.getId(), approval.getId(), request));
+    }
+
+    @Test
+    void savesReviewCalculationDefaults() {
+        approval.setType(StepType.REVIEW);
+        var request = new com.company.workflowbuilder.dto.request.ReviewConfigRequest();
+        request.setApproverMode(ApprovalConfigRequest.ApproverMode.DYNAMIC);
+        request.setDynamicActorSource(ApprovalConfigRequest.DynamicActorSource.REQUEST_CREATOR_MANAGER);
+        request.setCalculatedOutputs(List.of(new com.company.workflowbuilder.dto.CalculatedOutput("total", "Tổng", "[amount] * 2")));
+        service.configureReview(workflow.getId(), approval.getId(), request);
+        assertTrue(approval.getConfigJson().contains("[amount] * 2"));
     }
 
     @Test

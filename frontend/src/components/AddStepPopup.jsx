@@ -67,8 +67,18 @@ const STEP_TYPES = [
   }
 ];
 
-export default function AddStepPopup({ position, onSelect, onClose, hasStartStep }) {
+export default function AddStepPopup({ position, onSelect, onClose, hasStartStep, adding = false }) {
   const [search, setSearch] = useState('');
+
+  const popupWidth = 320;
+  const popupHeight = 430;
+  const viewportWidth = typeof window === 'undefined' ? 1280 : window.innerWidth;
+  const viewportHeight = typeof window === 'undefined' ? 800 : window.innerHeight;
+  const preferredLeft = position?.x || 400;
+  const left = preferredLeft + popupWidth <= viewportWidth - 12
+    ? preferredLeft
+    : Math.max(12, (position?.anchorX || preferredLeft) - popupWidth - 10);
+  const top = Math.min(Math.max(64, position?.y || 200), Math.max(64, viewportHeight - popupHeight - 12));
 
   // Filter out START if already present, and filter by search text
   const filteredSteps = STEP_TYPES.filter(s => {
@@ -84,8 +94,10 @@ export default function AddStepPopup({ position, onSelect, onClose, hasStartStep
 
       {/* Popup */}
       <div
-        className="absolute z-50 bg-white rounded-xl shadow-xl border border-gray-200 w-[320px] overflow-hidden"
-        style={{ left: position?.x || 400, top: position?.y || 200 }}
+        className="fixed z-[100] w-[320px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl"
+        style={{ left, top }}
+        role="dialog"
+        aria-label="Chọn loại step"
       >
         {/* Search */}
         <div className="p-3 border-b border-gray-100">
@@ -107,9 +119,11 @@ export default function AddStepPopup({ position, onSelect, onClose, hasStartStep
           {filteredSteps.map(step => {
             const Icon = step.icon;
             return (
-              <div
+              <button
+                type="button"
                 key={step.type}
-                className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-orange-50 transition-colors border-b border-gray-50 last:border-b-0 group"
+                disabled={adding}
+                className="group flex w-full items-center gap-3 border-b border-gray-50 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-orange-50 disabled:cursor-wait disabled:opacity-50"
                 onClick={() => onSelect(step.type)}
               >
                 <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${step.bgColor} ${step.iconColor}`}>
@@ -122,7 +136,7 @@ export default function AddStepPopup({ position, onSelect, onClose, hasStartStep
                   <div className="text-xs text-gray-500 truncate">{step.description}</div>
                 </div>
                 <ChevronRight size={16} className="text-gray-300 group-hover:text-orange-400 transition-colors flex-shrink-0" />
-              </div>
+              </button>
             );
           })}
           {filteredSteps.length === 0 && (

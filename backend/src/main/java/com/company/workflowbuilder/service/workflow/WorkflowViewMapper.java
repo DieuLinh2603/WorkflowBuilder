@@ -12,22 +12,40 @@ import com.company.workflowbuilder.entity.workflow.WorkflowStep;
 import com.company.workflowbuilder.entity.workflow.WorkflowStatus;
 import com.company.workflowbuilder.service.CurrentUserService;
 import com.company.workflowbuilder.service.WorkflowAuthorizationService;
+import com.company.workflowbuilder.service.WorkflowMetadataService;
+import com.company.workflowbuilder.dto.response.WorkflowTypeDefinitionResponse;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.Comparator;
+import java.util.Map;
 
 @Component
-@RequiredArgsConstructor
+@RequiredArgsConstructor(onConstructor_ = @org.springframework.beans.factory.annotation.Autowired)
 public class WorkflowViewMapper {
+    private final ObjectMapper expressionMapper = new ObjectMapper();
     private final WorkflowAuthorizationService authorization;
     private final CurrentUserService currentUser;
+    private final WorkflowMetadataService metadata;
+
+    /** Kept for unit tests and integrations compiled against the pre-metadata mapper. */
+    public WorkflowViewMapper(WorkflowAuthorizationService authorization, CurrentUserService currentUser) {
+        this(authorization, currentUser, null);
+    }
 
     public WorkflowResponse workflow(Workflow value) {
         User owner = value.getOwner();
+        var module = metadata == null ? null : metadata.moduleByCode(value.getModule());
+        WorkflowTypeDefinitionResponse type = metadata == null ? null : metadata.typeByCode(value.getType());
         return WorkflowResponse.builder()
                 .id(value.getId()).name(value.getName()).description(value.getDescription())
-                .type(value.getType()).module(value.getModule())
+                .type(value.getType()).typeName(value.getCustomTypeName() == null || value.getCustomTypeName().isBlank()
+                        ? (type == null ? value.getType() : type.getName()) : value.getCustomTypeName())
+                .module(value.getModule()).moduleName(module == null ? value.getModule() : module.getName())
+                .recommendedStepTypes(type == null ? java.util.List.of() : type.getRecommendedStepTypes())
+                .typeChecklist(type == null ? java.util.List.of() : type.getChecklist())
                 .ownerId(owner.getId()).ownerName(owner.getDisplayName())
                 .ownerAvatarInitials(initials(owner.getDisplayName()))
                 .editors(value.getEditors().stream()
@@ -38,6 +56,10 @@ public class WorkflowViewMapper {
                         .toList())
                 .version(value.getVersion()).status(value.getStatus().name())
                 .createdAt(value.getCreatedAt()).familyId(value.getFamilyId())
+                .formId(value.getFormVersion() == null ? null : value.getFormVersion().getForm().getId())
+                .formVersionId(value.getFormVersion() == null ? null : value.getFormVersion().getId())
+                .formVersionNumber(value.getFormVersion() == null ? null : value.getFormVersion().getVersionNumber())
+                .formName(value.getFormVersion() == null ? null : value.getFormVersion().getForm().getName())
                 .canEdit(authorization.canEdit(value)).canPublish(authorization.canPublish(value))
                 .canManageEditors(value.getStatus() == WorkflowStatus.DRAFT && authorization.canPublish(value))
                 .canDuplicate(currentUser.hasRole(SystemRole.ADMIN) || currentUser.hasRole(SystemRole.WORKFLOW_OWNER))
@@ -52,11 +74,21 @@ public class WorkflowViewMapper {
     public ConnectionResponse connection(WorkflowConnection value) {
         return ConnectionResponse.builder().id(value.getId())
                 .fromStepId(value.getFromStep().getId()).toStepId(value.getToStep().getId())
-                .type(value.getType()).logicalOperator(value.getLogicalOperator())
+                .type(value.getType()).logicalOperator(value.getLogicalOperator()).priority(value.getPriority())
                 .clauses(value.getClauses().stream().map(clause -> ConnectionResponse.ClauseResponse.builder()
                         .id(clause.getId()).fieldKey(clause.getFieldKey()).operator(clause.getOperator())
-                        .expectedValue(clause.getExpectedValue()).build()).toList())
+                        .expectedValue(clause.getExpectedValue()).expression(readExpression(clause.getExpressionJson()))
+                        .build()).toList())
                 .build();
+    }
+
+    private Map<String, Object> readExpression(String value) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            return expressionMapper.readValue(value, new TypeReference<>() {});
+        } catch (Exception exception) {
+            throw new IllegalStateException("Stored condition expression is invalid", exception);
+        }
     }
 
     private String initials(String name) {

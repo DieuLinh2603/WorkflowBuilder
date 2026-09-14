@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Copy, GitBranch, Info, X } from 'lucide-react';
-import { DismissibleBanner } from './shared/UXHelpers';
+import { apiFetch } from '../api';
 
 export default function DuplicateWorkflowModal({ workflow, currentUser, fetchDropdownUsers, busy, error, onClose, onConfirm }) {
   const isAdmin = currentUser?.systemRoles?.includes('ADMIN');
@@ -8,11 +8,14 @@ export default function DuplicateWorkflowModal({ workflow, currentUser, fetchDro
   const [ownerId, setOwnerId] = useState(currentUser?.id || '');
   const [owners, setOwners] = useState([]);
   const [validationError, setValidationError] = useState('');
+  const [module, setModule] = useState(workflow.module || '');
+  const [modules, setModules] = useState([]);
 
   useEffect(() => {
     if (!isAdmin || !fetchDropdownUsers) return;
     fetchDropdownUsers().then(setOwners).catch(() => setOwners([]));
   }, [fetchDropdownUsers, isAdmin]);
+  useEffect(() => { apiFetch('/api/metadata/modules').then(response => response.ok ? response.json() : []).then(setModules).catch(() => setModules([])); }, []);
 
   const selectedOwner = useMemo(() => owners.find(owner => owner.id === ownerId), [ownerId, owners]);
 
@@ -23,6 +26,7 @@ export default function DuplicateWorkflowModal({ workflow, currentUser, fetchDro
     onConfirm({
       name: trimmedName,
       sourceVersionId: workflow.id,
+      module,
       ...(isAdmin && ownerId ? { ownerId } : {}),
     });
   };
@@ -55,6 +59,8 @@ export default function DuplicateWorkflowModal({ workflow, currentUser, fetchDro
           <span className="mt-1 block text-right text-[10px] text-slate-400">{name.length}/200</span>
         </label>
 
+        <label className="block"><span className="mb-1.5 block text-sm font-semibold text-slate-700">Module đích <span className="text-red-500">*</span></span><select value={module} onChange={event => setModule(event.target.value)} className="input-field bg-white">{modules.map(item => <option key={item.code} value={item.code}>{item.name}</option>)}</select><span className="mt-1 block text-xs text-slate-400">Tên workflow chỉ cần duy nhất trong module được chọn.</span></label>
+
         {isAdmin && <label className="block">
           <span className="mb-1.5 block text-sm font-semibold text-slate-700">Người sở hữu workflow mới</span>
           <select value={ownerId} onChange={event => setOwnerId(event.target.value)} className="input-field bg-white">
@@ -64,10 +70,10 @@ export default function DuplicateWorkflowModal({ workflow, currentUser, fetchDro
           {selectedOwner && <span className="mt-1 block text-xs text-slate-400">Workflow mới sẽ thuộc về {selectedOwner.displayName}.</span>}
         </label>}
 
-        <DismissibleBanner storageKey="wf_banner_duplicate_scope">
-          <b>Bản sao được tạo ở trạng thái DRAFT, phiên bản v1.0.</b>
-          <p className="mt-0.5 text-xs text-blue-700">Các bước, field, điều kiện, kết nối và cấu hình sẽ được sao chép. Instance, lịch sử xử lý và Data Binding không được sao chép.</p>
-        </DismissibleBanner>
+        <div className="flex gap-3 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 text-sm leading-6 text-blue-800">
+          <Info size={18} className="mt-0.5 shrink-0"/>
+          <div><b>Bản sao được tạo ở trạng thái DRAFT, phiên bản v1.0.</b><p className="text-xs text-blue-700">Các bước, field, điều kiện, kết nối và cấu hình sẽ được sao chép. Instance, lịch sử xử lý và Data Binding không được sao chép.</p></div>
+        </div>
       </div>
 
       <footer className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50/70 px-6 py-4">

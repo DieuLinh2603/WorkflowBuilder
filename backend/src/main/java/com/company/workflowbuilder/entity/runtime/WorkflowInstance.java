@@ -27,6 +27,11 @@ public class WorkflowInstance {
     @JoinColumn(name = "workflow_id", nullable = false)
     private Workflow workflow;
 
+    /** Form definition frozen when this ticket was submitted. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "form_version_id", nullable = false)
+    private FormVersion formVersion;
+
     @Column(name = "request_code", nullable = false, unique = true)
     private String requestCode;
 

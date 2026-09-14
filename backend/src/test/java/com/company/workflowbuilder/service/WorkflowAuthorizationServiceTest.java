@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
@@ -33,9 +34,10 @@ class WorkflowAuthorizationServiceTest {
         currentUser = mock(CurrentUserService.class);
         audiences = mock(WorkflowAudienceRepository.class);
         groups = mock(UserGroupRepository.class);
-        authorization = new WorkflowAuthorizationService(currentUser, audiences, groups);
         owner = user();
         editor = user();
+        when(currentUser.user()).thenReturn(editor);
+        authorization = new WorkflowAuthorizationService(currentUser, audiences, groups);
     }
 
     @Test
@@ -111,13 +113,24 @@ class WorkflowAuthorizationServiceTest {
         assertTrue(authorization.canSubmit(workflow));
     }
 
+    @Test
+    void audienceCannotExpandAccessOutsideModule() {
+        Workflow workflow = workflow(WorkflowStatus.PUBLISHED);
+        editor.setModuleCodes(Set.of("FINANCE"));
+        when(audiences.findByWorkflowId(workflow.getId())).thenReturn(List.of(
+                WorkflowAudience.builder().workflow(workflow).subjectType(AudienceType.ALL_ACTIVE).build()));
+
+        assertFalse(authorization.canSubmit(workflow));
+        assertFalse(authorization.canView(workflow));
+    }
+
     private User user() {
         return User.builder().id(UUID.randomUUID()).email(UUID.randomUUID() + "@company.com")
-                .displayName("User").passwordHash("hash").build();
+                .displayName("User").passwordHash("hash").moduleCodes(new HashSet<>(Set.of("GENERAL"))).build();
     }
 
     private Workflow workflow(WorkflowStatus status) {
         return Workflow.builder().id(UUID.randomUUID()).name("Workflow").owner(owner)
-                .familyId(UUID.randomUUID()).status(status).editors(new HashSet<>()).build();
+                .familyId(UUID.randomUUID()).module("GENERAL").status(status).editors(new HashSet<>()).build();
     }
 }

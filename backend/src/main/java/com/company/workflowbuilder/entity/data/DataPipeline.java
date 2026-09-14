@@ -17,6 +17,7 @@ public class DataPipeline {
  @Column(nullable=false) private String name;
  @Column(columnDefinition="TEXT") private String description;
  @ManyToOne(fetch=FetchType.LAZY) @JoinColumn(name="owner_id",nullable=false) private User owner;
+ @ManyToOne(fetch=FetchType.LAZY) @JoinColumn(name="shared_with_id") private User sharedWith;
  @Column(nullable=false) @Builder.Default private String status="DRAFT";
  @JdbcTypeCode(SqlTypes.JSON)
  @Column(name="definition_json",nullable=false,columnDefinition="jsonb") @Builder.Default private String definitionJson="{}";

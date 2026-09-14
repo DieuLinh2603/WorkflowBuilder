@@ -3,6 +3,7 @@ package com.company.workflowbuilder.service;
 import com.company.workflowbuilder.dto.request.*;
 import com.company.workflowbuilder.dto.response.*;
 import com.company.workflowbuilder.entity.runtime.*;
+import com.company.workflowbuilder.entity.form.FormVersion;
 import com.company.workflowbuilder.entity.user.*;
 import com.company.workflowbuilder.entity.workflow.*;
 import com.company.workflowbuilder.exception.*;
@@ -29,6 +30,8 @@ public class WorkflowEngineService {
     private final WorkflowInstanceRepository instances;
     private final WorkflowTaskRepository tasks;
     private final WorkflowBatchRecordRepository normalizedBatchRecords;
+    private final WorkflowBatchRecordAccessRepository batchRecordAccess;
+    private final SystemActionExecutionRepository systemActionExecutions;
     private final DatasetVersionRepository datasetVersions;
     private final RequestDraftRepository drafts;
     private final InstanceStepLogRepository logs;
@@ -141,7 +144,7 @@ public class WorkflowEngineService {
 
     private BatchInstanceResponse submitBatchInternal(CreateBatchInstanceRequest request, Workflow workflow, User requester) {
         WorkflowStep start = startStep(workflow);
-        Map<String, Object> startConfig = codec.stepConfig(start);
+        Map<String, Object> startConfig = startConfig(workflow,start);
         if (!"BATCH".equals(startConfig.get("submissionMode")))
             throw new IllegalStateException("Workflow này chưa bật chế độ nộp danh sách");
         int limit = startConfig.get("maxBatchRows") instanceof Number number ? number.intValue() : 500;
@@ -185,7 +188,8 @@ public class WorkflowEngineService {
         Map<String, Object> envelope = new LinkedHashMap<>();
         envelope.put("_batch", true);
         envelope.put("records", batchRecords);
-        WorkflowInstance instance = instances.save(WorkflowInstance.builder().workflow(workflow).createdBy(requester)
+        WorkflowInstance instance = instances.save(WorkflowInstance.builder().workflow(workflow)
+                .formVersion(requireForm(workflow)).createdBy(requester)
                 .currentStep(start).requestCode(code()).batchId(batchId).fieldSnapshot(codec.write(envelope))
                 .requesterWithdrawalAllowed(!Boolean.FALSE.equals(startConfig.get("allowRequesterWithdrawal"))).build());
         log(instance, start, requester, "BATCH_SUBMITTED", records.size() + " records");
@@ -208,10 +212,11 @@ public class WorkflowEngineService {
     private WorkflowInstance createInstance(Workflow workflow, WorkflowStep start, User requester,
             Map<String, Object> submittedFields, UUID batchId, Integer batchRowNumber) {
         fieldValidation.validateSubmission(start.getId(), submittedFields);
-        WorkflowInstance instance = instances.save(WorkflowInstance.builder().workflow(workflow).createdBy(requester)
+        WorkflowInstance instance = instances.save(WorkflowInstance.builder().workflow(workflow)
+                .formVersion(requireForm(workflow)).createdBy(requester)
                 .currentStep(start).requestCode(code()).batchId(batchId).batchRowNumber(batchRowNumber)
                 .fieldSnapshot(codec.write(submittedFields))
-                .requesterWithdrawalAllowed(!Boolean.FALSE.equals(codec.stepConfig(start).get("allowRequesterWithdrawal")))
+                .requesterWithdrawalAllowed(!Boolean.FALSE.equals(startConfig(workflow,start).get("allowRequesterWithdrawal")))
                 .build());
         log(instance, start, requester, "SUBMITTED", null);
         advance(instance, start, null, false, 0);
@@ -238,6 +243,7 @@ public class WorkflowEngineService {
                 .orElseGet(() -> RequestDraft.builder().user(currentUser.user())
                         .workflowFamilyId(workflow.getFamilyId()).build());
         draft.setWorkflowVersion(workflow);
+        draft.setFormVersion(requireForm(workflow));
         draft.setFieldSnapshot(codec.write(values));
         return draftResponse(drafts.save(draft), workflow);
     }
@@ -263,20 +269,35 @@ public class WorkflowEngineService {
                         TaskStatus.PENDING)
                 .orElseThrow(() -> new AccessDeniedException("No active task is assigned to current user"));
         Map<String, Object> currentConfig = codec.stepConfig(current);
+        String reviewComment = prepareReviewResults(task, request);
         if (current.getType() == StepType.REVIEW && Boolean.TRUE.equals(currentConfig.get("commentRequired"))
                 && (request.getComment() == null || request.getComment().isBlank()))
             throw new IllegalArgumentException("Review comment is required");
-        if (current.getType() == StepType.REVIEW || current.getType() == StepType.APPROVAL
-                || current.getType() == StepType.ASSIGNMENT) {
+        if (current.getType() == StepType.ASSIGNMENT && "FAIL".equals(normalizedAction)
+                && (request.getComment() == null || request.getComment().isBlank()))
+            throw new IllegalArgumentException("Lý do thất bại là bắt buộc");
+        if (!"FAIL".equals(normalizedAction) && !"REJECT".equals(normalizedAction) && (current.getType() == StepType.REVIEW
+                || current.getType() == StepType.APPROVAL || current.getType() == StepType.ASSIGNMENT)) {
             Map<String, Object> snapshot = codec.snapshot(instance.getFieldSnapshot());
-            if (request.getFields() != null)
-                snapshot.putAll(request.getFields());
-            fieldValidation.validateStep(current.getId(), snapshot);
+            snapshot.putAll(fieldValidation.validateStepOutput(current.getId(), request.getFields()));
             instance.setFieldSnapshot(codec.write(snapshot));
         }
         if (current.getType() == StepType.APPROVAL && "REJECT".equals(normalizedAction)
                 && (request.getComment() == null || request.getComment().isBlank()))
             throw new IllegalArgumentException("Lý do từ chối là bắt buộc");
+        var calculatedRows = calculateTaskOutputs(task, request, List.of(codec.snapshot(instance.getFieldSnapshot())));
+        if (!calculatedRows.isEmpty()) {
+            var snapshot = codec.snapshot(instance.getFieldSnapshot());
+            snapshot.putAll(calculatedRows.get(0));
+            instance.setFieldSnapshot(codec.write(snapshot));
+            reviewComment = Objects.toString(reviewComment, "") + "\nOutput tính toán: " + codec.write(calculatedRows);
+        }
+        if (current.getType() == StepType.REVIEW) {
+            Map<String, Object> reviewedRecord = new LinkedHashMap<>();
+            reviewedRecord.put("outcome", "REJECT".equals(normalizedAction) ? "FAIL" : "PASS");
+            reviewedRecord.put("fields", codec.snapshot(instance.getFieldSnapshot()));
+            storeReviewHandoff(task, normalizedAction, request, List.of(reviewedRecord));
+        }
         if (current.getType() == StepType.REVIEW && "REJECT".equals(normalizedAction)) {
             task.setStatus(TaskStatus.COMPLETED);
             task.setCompletedAt(LocalDateTime.now());
@@ -287,7 +308,7 @@ public class WorkflowEngineService {
                         other.setStatus(TaskStatus.CANCELLED);
                         tasks.save(other);
                     });
-            log(instance, current, actor, "REVIEW_NOT_PASSED", request.getComment());
+            log(instance, current, actor, "REVIEW_NOT_PASSED", reviewComment);
             List<WorkflowConnection> reviewConnections = connections.findByFromStepId(current.getId());
             ConnectionType failType = reviewConnections.stream()
                     .anyMatch(connection -> connection.getType() == ConnectionType.REVIEW_FAIL)
@@ -314,6 +335,15 @@ public class WorkflowEngineService {
             }
             return response(instances.save(instance));
         }
+        if (current.getType() == StepType.ASSIGNMENT && "FAIL".equals(normalizedAction)) {
+            task.setStatus(TaskStatus.COMPLETED);
+            task.setCompletedAt(LocalDateTime.now());
+            tasks.save(task);
+            cancelRemainingTasks(instanceId, current.getId());
+            log(instance, current, actor, "ASSIGNMENT_FAILED", request.getComment());
+            advance(instance, current, ConnectionType.ASSIGNMENT_FAIL, true, 0);
+            return response(instances.save(instance));
+        }
         ConnectionType desired = switch (normalizedAction) {
             case "APPROVE" -> ConnectionType.APPROVE;
             case "REJECT" -> ConnectionType.REJECT;
@@ -326,10 +356,14 @@ public class WorkflowEngineService {
                             ? ConnectionType.REVIEW_PASS
                             : null; // DEFAULT remains the legacy pass branch.
         }
+        if (current.getType() == StepType.ASSIGNMENT)
+            desired = connections.findByFromStepId(current.getId()).stream()
+                    .anyMatch(connection -> connection.getType() == ConnectionType.ASSIGNMENT_DONE)
+                            ? ConnectionType.ASSIGNMENT_DONE : null;
         task.setStatus(TaskStatus.COMPLETED);
         task.setCompletedAt(LocalDateTime.now());
         tasks.save(task);
-        log(instance, current, actor, normalizedAction, request.getComment());
+        log(instance, current, actor, normalizedAction, reviewComment);
         boolean successfulAction = !"REJECT".equals(normalizedAction);
         if (successfulAction && !completionThresholdReached(instanceId, current, task, currentConfig))
             return response(instances.save(instance));
@@ -361,19 +395,83 @@ public class WorkflowEngineService {
         if ((step.getType() == StepType.APPROVAL || step.getType() == StepType.REVIEW)
                 && "REJECT".equals(normalized) && (request.getComment() == null || request.getComment().isBlank()))
             throw new IllegalArgumentException("Lý do từ chối là bắt buộc");
+        if (step.getType() == StepType.ASSIGNMENT && "FAIL".equals(normalized)
+                && (request.getComment() == null || request.getComment().isBlank()))
+            throw new IllegalArgumentException("Lý do thất bại là bắt buộc");
+        Map<String, Object> stepOutput = Map.of();
+        if (!"FAIL".equals(normalized) && !"REJECT".equals(normalized)
+                && (step.getType() == StepType.REVIEW || step.getType() == StepType.APPROVAL
+                        || step.getType() == StepType.ASSIGNMENT))
+            stepOutput = fieldValidation.validateStepOutput(step.getId(), request.getFields());
         List<Map<String, Object>> records = batchRecords(instance);
         List<Map<String, Object>> activationRecords = records.stream()
                 .filter(record -> step.getId().toString().equals(record.get("currentStepId")))
                 .filter(record -> task.getActivationId().toString().equals(record.get("activationId"))).toList();
         if (activationRecords.isEmpty())
             throw new IllegalStateException("Batch task không còn hồ sơ đang chờ xử lý");
+        if (!stepOutput.isEmpty())
+            for (Map<String, Object> record : activationRecords) {
+                Map<String, Object> recordFields = codec.snapshot(codec.write(record.get("fields")));
+                recordFields.putAll(stepOutput);
+                record.put("fields", recordFields);
+            }
+        boolean rowLevelReview = step.getType() == StepType.REVIEW && request.getSelectedRowsOutcome() != null;
+        Set<Integer> selectedRows = request.getSelectedRowNumbers() == null
+                ? Set.of() : new HashSet<>(request.getSelectedRowNumbers());
+        String selectedOutcome = Objects.toString(request.getSelectedRowsOutcome(), "").toUpperCase(Locale.ROOT);
+        if (step.getType() == StepType.REVIEW && request.getSelectedRowNumbers() != null && !rowLevelReview)
+            throw new IllegalArgumentException("Phải chọn kết quả PASS hoặc FAIL cho các dòng đã chọn");
+        if (rowLevelReview && "COMMENT_ONLY".equals(config.get("resultMode")))
+            throw new IllegalArgumentException("Review chỉ nhận xét không hỗ trợ phân loại PASS/FAIL theo dòng");
+        if (rowLevelReview && !"COMPLETE".equals(normalized))
+            throw new IllegalArgumentException("Phân loại từng dòng phải được gửi bằng thao tác hoàn thành review");
+        if (rowLevelReview && !Set.of("PASS", "FAIL").contains(selectedOutcome))
+            throw new IllegalArgumentException("Kết quả của dòng được chọn chỉ có thể là PASS hoặc FAIL");
+        Set<Integer> availableRows = activationRecords.stream()
+                .map(record -> Integer.parseInt(record.get("rowNumber").toString()))
+                .collect(java.util.stream.Collectors.toSet());
+        if (rowLevelReview && !availableRows.containsAll(selectedRows))
+            throw new IllegalArgumentException("Danh sách dòng review chứa dòng không thuộc task hiện tại");
+        long passCount = rowLevelReview ? activationRecords.stream().filter(record -> {
+            boolean chosen = selectedRows.contains(Integer.parseInt(record.get("rowNumber").toString()));
+            return chosen == "PASS".equals(selectedOutcome);
+        }).count() : 0;
+        if (rowLevelReview && passCount < activationRecords.size()
+                && (request.getComment() == null || request.getComment().isBlank()))
+            throw new IllegalArgumentException("Nhận xét là bắt buộc khi có dòng FAIL");
+        String reviewComment = prepareReviewResults(task, request);
+        var calculationInput = activationRecords.stream().map(record -> codec.snapshot(codec.write(record.get("fields")))).toList();
+        var calculatedRows = calculateTaskOutputs(task, request, calculationInput);
+        for (int index = 0; index < calculatedRows.size(); index++) {
+            var row = calculationInput.get(index);
+            row.putAll(calculatedRows.get(index));
+            activationRecords.get(index).put("fields", row);
+        }
+        if (!calculatedRows.isEmpty())
+            reviewComment = Objects.toString(reviewComment, "") + "\nOutput tính toán: " + codec.write(calculatedRows);
+        if (step.getType() == StepType.REVIEW) {
+            List<Map<String, Object>> handoffRecords = activationRecords.stream().map(record -> {
+                Map<String, Object> reviewedRecord = new LinkedHashMap<>();
+                reviewedRecord.put("rowNumber", record.get("rowNumber"));
+                if (record.get("businessKey") != null) reviewedRecord.put("businessKey", record.get("businessKey"));
+                boolean chosen = selectedRows.contains(Integer.parseInt(record.get("rowNumber").toString()));
+                boolean passed = !rowLevelReview || chosen == "PASS".equals(selectedOutcome);
+                reviewedRecord.put("outcome", passed && !"REJECT".equals(normalized) ? "PASS" : "FAIL");
+                reviewedRecord.put("fields", codec.snapshot(codec.write(record.get("fields"))));
+                return reviewedRecord;
+            }).toList();
+            storeReviewHandoff(task, normalized, request, handoffRecords);
+        }
         task.setStatus(TaskStatus.COMPLETED);
         task.setCompletedAt(LocalDateTime.now());
         tasks.save(task);
-        log(instance, step, currentUser.user(), "BATCH_" + normalized,
-                activationRecords.size() + " records; " + Objects.toString(request.getComment(), ""));
+        String rowSummary = rowLevelReview
+                ? passCount + " PASS, " + (activationRecords.size() - passCount) + " FAIL; " : "";
+        log(instance, step, currentUser.user(), rowLevelReview ? "BATCH_REVIEW_ROWS" : "BATCH_" + normalized,
+                rowSummary + activationRecords.size() + " records; " + Objects.toString(reviewComment, ""));
         boolean rejected = "REJECT".equals(normalized);
-        if (!rejected && !completionThresholdReached(instance.getId(), step, task, config)) {
+        boolean assignmentFailed = step.getType() == StepType.ASSIGNMENT && "FAIL".equals(normalized);
+        if (!rejected && !assignmentFailed && !completionThresholdReached(instance.getId(), step, task, config)) {
             saveBatchState(instance, records);
             return response(instances.save(instance));
         }
@@ -389,17 +487,37 @@ public class WorkflowEngineService {
             case REVIEW -> rejected ? ConnectionType.REVIEW_FAIL
                     : outgoing.stream().anyMatch(connection -> connection.getType() == ConnectionType.REVIEW_PASS)
                             ? ConnectionType.REVIEW_PASS : null;
+            case ASSIGNMENT -> assignmentFailed ? ConnectionType.ASSIGNMENT_FAIL
+                    : outgoing.stream().anyMatch(connection -> connection.getType() == ConnectionType.ASSIGNMENT_DONE)
+                            ? ConnectionType.ASSIGNMENT_DONE : null;
             default -> null;
         };
         boolean terminalReject = rejected && (step.getType() == StepType.REVIEW || step.getType() == StepType.APPROVAL)
                 && outgoing.stream().noneMatch(connection -> connection.getType() == desired);
         for (Map<String, Object> record : activationRecords) {
             record.put("humanActionAt", LocalDateTime.now().toString());
-            if (terminalReject) {
+            ConnectionType recordDesired = desired;
+            boolean recordTerminalReject = terminalReject;
+            if (rowLevelReview) {
+                boolean chosen = selectedRows.contains(Integer.parseInt(record.get("rowNumber").toString()));
+                boolean passed = chosen == "PASS".equals(selectedOutcome);
+                recordDesired = passed
+                        ? outgoing.stream().anyMatch(connection -> connection.getType() == ConnectionType.REVIEW_PASS)
+                                ? ConnectionType.REVIEW_PASS : null
+                        : ConnectionType.REVIEW_FAIL;
+                recordTerminalReject = !passed && outgoing.stream()
+                        .noneMatch(connection -> connection.getType() == ConnectionType.REVIEW_FAIL);
+                markBatchOutcome(record, passed ? "PASS" : "FAIL", request.getComment(), currentUser.user());
+            } else {
+                String outcome = rejected ? "REJECT" : assignmentFailed ? "FAIL"
+                        : step.getType() == StepType.REVIEW ? "PASS" : normalized;
+                markBatchOutcome(record, outcome, request.getComment(), currentUser.user());
+            }
+            if (recordTerminalReject) {
                 record.put("status", InstanceStatus.REJECTED.name());
                 record.put("conditionBlocked", false);
                 record.put("completedAt", LocalDateTime.now().toString());
-            } else advanceBatchRecord(instance, record, step, desired, 0);
+            } else advanceBatchRecord(instance, record, step, recordDesired, 0);
         }
         saveBatchState(instance, records);
         synchronizeBatchTasks(instance, records);
@@ -439,7 +557,8 @@ public class WorkflowEngineService {
         if (!currentUser.hasRole(SystemRole.ADMIN) && !instance.getCreatedBy().getId().equals(currentUser.id()))
             throw new AccessDeniedException("Only requester or admin can cancel");
         instance.setStatus(InstanceStatus.CANCELLED);
-        if (isBatch(instance)) terminateBatchRecords(instance, InstanceStatus.CANCELLED);
+        if (isBatch(instance)) terminateBatchRecords(instance, InstanceStatus.CANCELLED,
+                currentUser.user(), "Batch đã bị hủy bởi " + currentUser.user().getDisplayName());
         instance.setCompletedAt(LocalDateTime.now());
         tasks.findByInstanceIdAndStatus(instanceId, TaskStatus.PENDING).forEach(t -> {
             t.setStatus(TaskStatus.CANCELLED);
@@ -480,7 +599,8 @@ public class WorkflowEngineService {
             tasks.save(task);
         });
         instance.setStatus(InstanceStatus.WITHDRAWN);
-        if (isBatch(instance)) terminateBatchRecords(instance, InstanceStatus.WITHDRAWN);
+        if (isBatch(instance)) terminateBatchRecords(instance, InstanceStatus.WITHDRAWN,
+                currentUser.user(), reason);
         instance.setConditionBlocked(false);
         instance.setCompletedAt(now);
         instance.setWithdrawnAt(now);
@@ -500,7 +620,8 @@ public class WorkflowEngineService {
 
     @Transactional(readOnly = true)
     public List<InstanceResponse> mine() {
-        return instances.findByCreatedByIdOrderByStartedAtDesc(currentUser.id()).stream().map(this::response).toList();
+        return instances.findByCreatedByIdOrderByStartedAtDesc(currentUser.id()).stream()
+                .map(this::instanceSummaryResponse).toList();
     }
 
     @Transactional(readOnly = true)
@@ -533,7 +654,16 @@ public class WorkflowEngineService {
     public List<InstanceHistoryResponse> history(UUID id) {
         WorkflowInstance i = instance(id);
         requireRuntimeAccess(i);
-        return logs.findByInstanceIdOrderByActedAtAsc(id).stream()
+        var history = logs.findByInstanceIdOrderByActedAtAsc(id);
+        boolean fullHistory = currentUser.hasRole(SystemRole.ADMIN)
+                || i.getCreatedBy().getId().equals(currentUser.id())
+                || i.getWorkflow().getOwner().getId().equals(currentUser.id());
+        if (!fullHistory) {
+            Set<UUID> assignedStepIds = tasks.findByInstanceIdAndAssigneeId(id, currentUser.id()).stream()
+                    .map(task -> task.getStep().getId()).collect(java.util.stream.Collectors.toSet());
+            history = history.stream().filter(item -> assignedStepIds.contains(item.getStep().getId())).toList();
+        }
+        return history.stream()
                 .map(log -> InstanceHistoryResponse.builder().id(log.getId()).stepId(log.getStep().getId())
                         .stepLabel(log.getStep().getLabel()).stepType(log.getStep().getType().name())
                         .action(log.getAction()).actorId(log.getActor() == null ? null : log.getActor().getId())
@@ -548,11 +678,48 @@ public class WorkflowEngineService {
         requireRuntimeAccess(instance);
         if (!isBatch(instance)) throw new IllegalArgumentException("Instance không phải batch");
         int safePage = Math.max(0, page), safeSize = Math.max(1, Math.min(200, size));
-        List<Map<String, Object>> records = batchRecords(instance);
+        List<WorkflowBatchRecord> latest = latestBatchRecordEntities(instance.getId());
+        List<Map<String, Object>> records = latest.isEmpty()
+                ? batchRecords(instance).stream().filter(state -> canViewBatchState(instance, state))
+                        .map(this::legacyBatchSummary).toList()
+                : latest.stream().filter(row -> canViewBatchRecord(instance, row))
+                        .map(this::batchRecordSummary).toList();
         int from = Math.min(records.size(), safePage * safeSize);
         int to = Math.min(records.size(), from + safeSize);
+        Map<String, Long> statusCounts = records.stream().collect(java.util.stream.Collectors.groupingBy(
+                record -> Objects.toString(record.get("status"), InstanceStatus.RUNNING.name()),
+                LinkedHashMap::new, java.util.stream.Collectors.counting()));
         return Map.of("items", records.subList(from, to), "page", safePage, "size", safeSize,
-                "total", records.size(), "totalPages", (records.size() + safeSize - 1) / safeSize);
+                "total", records.size(), "totalPages", (records.size() + safeSize - 1) / safeSize,
+                "statusCounts", statusCounts);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> batchRecord(UUID id, int rowNumber) {
+        WorkflowInstance instance = instance(id);
+        requireRuntimeAccess(instance);
+        if (!isBatch(instance)) throw new IllegalArgumentException("Instance không phải batch");
+        WorkflowBatchRecord row = normalizedBatchRecords
+                .findFirstByInstanceIdAndRowNumberOrderByRevisionDesc(id, rowNumber).orElse(null);
+        Map<String, Object> state;
+        Map<String, Object> result;
+        if (row != null) {
+            if (!canViewBatchRecord(instance, row)) throw new AccessDeniedException("Cannot view this batch row");
+            state = codec.snapshot(row.getStateJson());
+            result = new LinkedHashMap<>(batchRecordSummary(row));
+            result.put("fields", codec.snapshot(row.getPayloadJson()));
+        } else {
+            state = batchRecords(instance).stream()
+                    .filter(value -> Objects.equals(((Number) value.get("rowNumber")).intValue(), rowNumber))
+                    .findFirst().orElseThrow(() -> new ResourceNotFoundException("WorkflowBatchRecord", "rowNumber", rowNumber));
+            if (!canViewBatchState(instance, state)) throw new AccessDeniedException("Cannot view this batch row");
+            result = new LinkedHashMap<>(legacyBatchSummary(state));
+            result.put("fields", state.getOrDefault("fields", Map.of()));
+        }
+        result.put("conditionBlocked", Boolean.TRUE.equals(state.get("conditionBlocked")));
+        result.put("historicalReasonAvailable", result.get("lastReason") != null);
+        result.put("systemActions", batchSystemActions(instance, rowNumber));
+        return result;
     }
 
     @Transactional(readOnly = true)
@@ -560,7 +727,7 @@ public class WorkflowEngineService {
         if (status != TaskStatus.PENDING && status != TaskStatus.COMPLETED)
             throw new IllegalArgumentException("Chỉ hỗ trợ xem task đang chờ hoặc đã hoàn thành");
         return tasks.findByAssigneeIdAndStatusOrderByCreatedAtDesc(currentUser.id(), status).stream()
-                .map(this::taskResponse).toList();
+                .map(this::taskSummaryResponse).toList();
     }
 
     @Transactional(readOnly = true)
@@ -632,8 +799,16 @@ public class WorkflowEngineService {
             return;
         }
         if (next.getType() == StepType.SYSTEM_ACTION) {
-            systemActionExecutor.execute(instance, next);
-            advance(instance, next, null, true, depth + 1);
+            var executionOutcome = systemActionExecutor.executeOutcome(instance, next,
+                    List.of(codec.snapshot(instance.getFieldSnapshot())), null);
+            if (executionOutcome == WorkflowSystemActionExecutor.Outcome.QUEUED) return;
+            boolean success = executionOutcome == WorkflowSystemActionExecutor.Outcome.SUCCESS;
+            ConnectionType outcome = systemActionRoute(next, success);
+            boolean explicit = outcome != null && connections.findByFromStepId(next.getId()).stream()
+                    .anyMatch(connection -> connection.getType() == outcome);
+            if (!success && !explicit && !"CONTINUE".equals(codec.stepConfig(next).get("failurePolicy")))
+                throw new IllegalStateException("System Action failed and has no SYSTEM_FAIL branch");
+            advance(instance, next, explicit ? outcome : null, true, depth + 1);
             return;
         }
         if (next.getType() == StepType.START) {
@@ -658,6 +833,7 @@ public class WorkflowEngineService {
         WorkflowConnection selected = select(connections.findByFromStepId(source.getId()), desired, fields);
         if (selected == null) {
             state.put("conditionBlocked", true);
+            markBatchOutcome(state, "CONDITION_BLOCKED", "Không có điều kiện chuyển bước nào thỏa mãn", null);
             return;
         }
         WorkflowStep next = selected.getToStep();
@@ -674,6 +850,8 @@ public class WorkflowEngineService {
                     ? "REJECTED" : "COMPLETED";
             state.put("status", Objects.toString(config.get("outcome"), fallback));
             state.put("completedAt", LocalDateTime.now().toString());
+            if (state.get("lastOutcome") == null)
+                markBatchOutcome(state, Objects.toString(state.get("status"), "COMPLETED"), null, null);
             if (Boolean.TRUE.equals(config.get("notifyRecordRecipient")))
                 notifyBatchRecordAtEnd(instance, fields, config);
             return;
@@ -686,14 +864,30 @@ public class WorkflowEngineService {
         }
         if (next.getType() == StepType.SYSTEM_ACTION) {
             String original = instance.getFieldSnapshot();
+            List<Map<String, Object>> calculationRows = new ArrayList<>();
+            calculationRows.add(new LinkedHashMap<>(fields));
+            batchRecords(instance).stream()
+                    .filter(record -> !Objects.equals(record.get("rowNumber"), state.get("rowNumber")))
+                    .map(record -> codec.snapshot(codec.write(record.get("fields"))))
+                    .forEach(calculationRows::add);
             instance.setFieldSnapshot(codec.write(fields));
-            systemActionExecutor.execute(instance, next);
+            var executionOutcome = systemActionExecutor.executeOutcome(instance, next, calculationRows,
+                    ((Number) state.get("rowNumber")).intValue());
             Map<String, Object> updated = codec.snapshot(instance.getFieldSnapshot());
             instance.setFieldSnapshot(original);
             fields.clear();
             fields.putAll(updated);
             state.put("fields", fields);
-            advanceBatchRecord(instance, state, next, null, depth + 1);
+            if (executionOutcome == WorkflowSystemActionExecutor.Outcome.QUEUED) return;
+            boolean success = executionOutcome == WorkflowSystemActionExecutor.Outcome.SUCCESS;
+            markBatchOutcome(state, success ? "SYSTEM_SUCCESS" : "SYSTEM_FAIL",
+                    success ? null : "System Action thất bại", null);
+            ConnectionType outcome = systemActionRoute(next, success);
+            boolean explicit = outcome != null && connections.findByFromStepId(next.getId()).stream()
+                    .anyMatch(connection -> connection.getType() == outcome);
+            if (!success && !explicit && !"CONTINUE".equals(codec.stepConfig(next).get("failurePolicy")))
+                throw new IllegalStateException("System Action failed and has no SYSTEM_FAIL branch");
+            advanceBatchRecord(instance, state, next, explicit ? outcome : null, depth + 1);
             return;
         }
         if (next.getType() == StepType.START) {
@@ -703,6 +897,8 @@ public class WorkflowEngineService {
         if (next.getType() == StepType.APPROVAL
                 && "AUTO".equalsIgnoreCase(Objects.toString(codec.stepConfig(next).get("mode"), ""))) {
             boolean approved = autoMatches(codec.stepConfig(next), fields);
+            markBatchOutcome(state, approved ? "AUTO_APPROVED" : "AUTO_REJECTED",
+                    approved ? null : "Không thỏa điều kiện tự động phê duyệt", null);
             advanceBatchRecord(instance, state, next,
                     approved ? ConnectionType.APPROVE : ConnectionType.REJECT, depth + 1);
             return;
@@ -714,6 +910,57 @@ public class WorkflowEngineService {
         finally { instance.setFieldSnapshot(original); }
         if (actors.isEmpty()) throw new IllegalStateException("Step '" + next.getLabel() + "' cannot resolve an active actor");
         state.put("actorIds", actors.stream().map(user -> user.getId().toString()).sorted().toList());
+    }
+
+    /** Resumes an instance after a durable connector execution has reached a terminal state. */
+    @Transactional
+    public void resumeSystemAction(SystemActionExecution execution, boolean success, Map<String, Object> outputs) {
+        WorkflowInstance instance = instances.findById(execution.getInstance().getId())
+                .orElseThrow(() -> new ResourceNotFoundException("WorkflowInstance", "id", execution.getInstance().getId()));
+        WorkflowStep step = steps.findById(execution.getStep().getId())
+                .orElseThrow(() -> new ResourceNotFoundException("WorkflowStep", "id", execution.getStep().getId()));
+        ConnectionType outcome = systemActionRoute(step, success);
+        if (execution.getBatchRowNumber() != null) {
+            List<Map<String, Object>> records = batchRecords(instance);
+            Map<String, Object> state = records.stream()
+                    .filter(record -> Objects.equals(((Number) record.get("rowNumber")).intValue(), execution.getBatchRowNumber()))
+                    .findFirst().orElseThrow(() -> new IllegalStateException("System Action batch row no longer exists"));
+            if (!step.getId().toString().equals(Objects.toString(state.get("currentStepId"), ""))) return;
+            log(instance, step, null, success ? "SYSTEM_ACTION_COMPLETED" : "SYSTEM_ACTION_FAILED",
+                    safeSystemActionComment(execution, success));
+            @SuppressWarnings("unchecked")
+            Map<String, Object> fields = (Map<String, Object>) state.getOrDefault("fields", new LinkedHashMap<>());
+            if (success) fields.putAll(outputs);
+            state.put("fields", fields);
+            markBatchOutcome(state, success ? "SYSTEM_SUCCESS" : "SYSTEM_FAIL",
+                    success ? null : "System Action thất bại (execution " + execution.getId() + ")", null);
+            advanceBatchRecord(instance, state, step, outcome, 0);
+            saveBatchState(instance, records);
+            synchronizeBatchTasks(instance, records);
+            saveBatchState(instance, records);
+            updateBatchSummary(instance, records);
+            instances.save(instance);
+            return;
+        }
+        if (instance.getCurrentStep() == null || !instance.getCurrentStep().getId().equals(step.getId())) return;
+        log(instance, step, null, success ? "SYSTEM_ACTION_COMPLETED" : "SYSTEM_ACTION_FAILED",
+                safeSystemActionComment(execution, success));
+        if (success && !outputs.isEmpty()) {
+            Map<String, Object> snapshot = codec.snapshot(instance.getFieldSnapshot());
+            snapshot.putAll(outputs);
+            instance.setFieldSnapshot(codec.write(snapshot));
+            instances.save(instance);
+        }
+        advance(instance, step, outcome, true, 0);
+        instances.save(instance);
+    }
+
+    /** A successful System Action may evaluate IF/ELSE against its newly mapped snapshot fields. */
+    private ConnectionType systemActionRoute(WorkflowStep step, boolean success) {
+        if (!success) return ConnectionType.SYSTEM_FAIL;
+        boolean conditional = connections.findByFromStepId(step.getId()).stream()
+                .anyMatch(connection -> connection.getType() == ConnectionType.IF);
+        return conditional ? null : ConnectionType.SYSTEM_SUCCESS;
     }
 
     @SuppressWarnings("unchecked")
@@ -777,20 +1024,78 @@ public class WorkflowEngineService {
             row.setCurrentStep(stepId == null ? null : steps.findById(UUID.fromString(stepId.toString())).orElse(null));
             Object acted = state.get("humanActionAt");
             row.setHumanActionAt(acted == null ? null : LocalDateTime.parse(acted.toString()));
-            normalizedBatchRecords.save(row);
+            row.setLastOutcome(Objects.toString(state.get("lastOutcome"), null));
+            row.setLastReason(limitReason(Objects.toString(state.get("lastReason"), null)));
+            Object lastActorId = state.get("lastActorId");
+            row.setLastActor(lastActorId == null ? null
+                    : users.findById(UUID.fromString(lastActorId.toString())).orElse(null));
+            row.setLastActionAt(parseDateTime(state.get("lastActionAt")));
+            row.setCompletedAt(parseDateTime(state.get("completedAt")));
+            row = normalizedBatchRecords.save(row);
+            grantBatchRecordAccess(row, state, fields);
         }
     }
 
-    private void terminateBatchRecords(WorkflowInstance instance, InstanceStatus status) {
+    private void terminateBatchRecords(WorkflowInstance instance, InstanceStatus status, User actor, String reason) {
         List<Map<String, Object>> records = batchRecords(instance);
         records.stream().filter(record -> InstanceStatus.RUNNING.name().equals(record.get("status"))).forEach(record -> {
             record.put("status", status.name());
             record.put("conditionBlocked", false);
             record.put("completedAt", LocalDateTime.now().toString());
+            markBatchOutcome(record, status.name(), reason, actor);
             record.remove("activationId");
             record.remove("actorIds");
         });
         saveBatchState(instance, records);
+    }
+
+    private void markBatchOutcome(Map<String, Object> state, String outcome, String reason, User actor) {
+        state.put("lastOutcome", outcome);
+        if (reason == null || reason.isBlank()) state.remove("lastReason");
+        else state.put("lastReason", limitReason(reason));
+        if (actor == null) state.remove("lastActorId");
+        else state.put("lastActorId", actor.getId().toString());
+        state.put("lastActionAt", LocalDateTime.now().toString());
+    }
+
+    private void grantBatchRecordAccess(WorkflowBatchRecord row, Map<String, Object> state, Object fields) {
+        if (row.getId() == null) return;
+        if (state.get("actorIds") instanceof Collection<?> actorIds)
+            for (Object actorId : actorIds) grantBatchRecordAccess(row, actorId, "ACTOR");
+        if (fields instanceof Map<?, ?> values) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> recordFields = (Map<String, Object>) values;
+            recordRecipient(row.getInstance(), recordFields)
+                    .ifPresent(user -> grantBatchRecordAccess(row, user.getId(), "RECORD_RECIPIENT"));
+        }
+    }
+
+    private void grantBatchRecordAccess(WorkflowBatchRecord row, Object rawUserId, String type) {
+        try {
+            UUID userId = rawUserId instanceof UUID id ? id : UUID.fromString(rawUserId.toString());
+            if (batchRecordAccess.existsByBatchRecordIdAndUserIdAndAccessType(row.getId(), userId, type)) return;
+            users.findById(userId).ifPresent(user -> batchRecordAccess.save(WorkflowBatchRecordAccess.builder()
+                    .batchRecord(row).user(user).accessType(type).build()));
+        } catch (IllegalArgumentException ignored) {
+        }
+    }
+
+    private LocalDateTime parseDateTime(Object value) {
+        if (value == null || value.toString().isBlank()) return null;
+        try { return LocalDateTime.parse(value.toString()); }
+        catch (RuntimeException ignored) { return null; }
+    }
+
+    private String limitReason(String value) {
+        if (value == null || value.isBlank()) return null;
+        return value.length() <= 2000 ? value : value.substring(0, 2000);
+    }
+
+    private String safeSystemActionComment(SystemActionExecution execution, boolean success) {
+        String comment = "execution=" + execution.getId();
+        if (!success) comment += "; System Action thất bại"
+                + (execution.getResponseStatus() == null ? "" : " (HTTP " + execution.getResponseStatus() + ")");
+        return comment;
     }
 
     private void updateBatchSummary(WorkflowInstance instance, List<Map<String, Object>> records) {
@@ -939,7 +1244,7 @@ public class WorkflowEngineService {
         // The transition is executed before the action audit row is appended, so
         // the authenticated runtime actor is the reliable previous-step actor.
         if (Boolean.TRUE.equals(config.get("includePreviousActor")))
-            recipients.add(currentUser.id());
+            recipients.add(previousRuntimeActor(instance).getId());
         if (Boolean.TRUE.equals(config.get("includeRecordRecipient")))
             recordRecipient(instance).ifPresent(user -> recipients.add(user.getId()));
         if (Boolean.TRUE.equals(config.get("includeNextStepActors"))) {
@@ -961,6 +1266,19 @@ public class WorkflowEngineService {
                 Objects.toString(config.get("webhookUrl"), ""), instance, step);
     }
 
+    private User previousRuntimeActor(WorkflowInstance instance) {
+        try {
+            User authenticated = currentUser.user();
+            if (authenticated != null) return authenticated;
+        }
+        catch (RuntimeException ignored) {
+        }
+        List<InstanceStepLog> history = logs.findByInstanceIdOrderByActedAtAsc(instance.getId());
+        for (int index = history.size() - 1; index >= 0; index--)
+            if (history.get(index).getActor() != null) return history.get(index).getActor();
+        return instance.getCreatedBy();
+    }
+
     private boolean autoMatches(Map<String, Object> config, Map<String, Object> snapshot) {
         List<Map<String, Object>> clauses = (List<Map<String, Object>>) config.getOrDefault("autoConditions",
                 List.of());
@@ -975,27 +1293,21 @@ public class WorkflowEngineService {
     }
 
     private boolean rawEvaluate(String op, Object actual, Object expected) {
-        String a = actual == null ? null : String.valueOf(actual),
-                e = expected == null ? null : String.valueOf(expected);
-        return switch (op) {
-            case "IS_EMPTY" -> a == null || a.isBlank();
-            case "NOT_EMPTY" -> a != null && !a.isBlank();
-            case "EQ" -> Objects.equals(a, e);
-            case "NEQ" -> !Objects.equals(a, e);
-            case "CONTAINS" -> a != null && a.contains(Objects.toString(e, ""));
-            case "GT" -> decimal(a).compareTo(decimal(e)) > 0;
-            case "GTE" -> decimal(a).compareTo(decimal(e)) >= 0;
-            case "LT" -> decimal(a).compareTo(decimal(e)) < 0;
-            case "LTE" -> decimal(a).compareTo(decimal(e)) <= 0;
-            default -> false;
-        };
+        try {
+            WorkflowConditionClause clause = WorkflowConditionClause.builder()
+                    .operator(ConditionOperator.valueOf(op.toUpperCase(Locale.ROOT)))
+                    .expectedValue(expected == null ? null : String.valueOf(expected)).build();
+            return evaluator.evaluate(clause, actual);
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
     }
 
     private void validateTaskAction(WorkflowStep step, String action) {
         boolean valid = switch (step.getType()) {
             case APPROVAL -> Set.of("APPROVE", "REJECT").contains(action);
             case REVIEW -> Set.of("COMPLETE", "REJECT").contains(action);
-            case ASSIGNMENT -> "COMPLETE".equals(action);
+            case ASSIGNMENT -> Set.of("COMPLETE", "FAIL").contains(action);
             default -> false;
         };
         if (!valid)
@@ -1034,7 +1346,7 @@ public class WorkflowEngineService {
 
     private Optional<User> recordRecipient(WorkflowInstance instance, Map<String, Object> fields) {
         WorkflowStep start = startStep(instance.getWorkflow());
-        String fieldKey = Objects.toString(codec.stepConfig(start).get("recordRecipientFieldKey"), "").trim();
+        String fieldKey = Objects.toString(startConfig(instance.getWorkflow(),start).get("recordRecipientFieldKey"), "").trim();
         if (fieldKey.isBlank())
             return Optional.empty();
         Object raw = fields.get(fieldKey);
@@ -1063,6 +1375,91 @@ public class WorkflowEngineService {
                     && recordRecipient(instance, (Map<String, Object>) values)
                             .map(user -> user.getId().equals(userId)).orElse(false);
         });
+    }
+
+    private boolean hasFullBatchAccess(WorkflowInstance instance) {
+        return currentUser.hasRole(SystemRole.ADMIN)
+                || instance.getCreatedBy().getId().equals(currentUser.id())
+                || instance.getWorkflow().getOwner().getId().equals(currentUser.id());
+    }
+
+    private List<WorkflowBatchRecord> latestBatchRecordEntities(UUID instanceId) {
+        Map<Integer, WorkflowBatchRecord> latest = new LinkedHashMap<>();
+        for (WorkflowBatchRecord row : normalizedBatchRecords.findByInstanceIdOrderByRowNumberAscRevisionDesc(instanceId))
+            latest.putIfAbsent(row.getRowNumber(), row);
+        return new ArrayList<>(latest.values());
+    }
+
+    private boolean canViewBatchRecord(WorkflowInstance instance, WorkflowBatchRecord row) {
+        if (hasFullBatchAccess(instance)) return true;
+        if (row.getId() != null && batchRecordAccess.existsByBatchRecordIdAndUserId(row.getId(), currentUser.id()))
+            return true;
+        return canViewBatchState(instance, codec.snapshot(row.getStateJson()));
+    }
+
+    @SuppressWarnings("unchecked")
+    private boolean canViewBatchState(WorkflowInstance instance, Map<String, Object> state) {
+        if (hasFullBatchAccess(instance)) return true;
+        if (state.get("actorIds") instanceof Collection<?> actorIds
+                && actorIds.stream().anyMatch(value -> currentUser.id().toString().equals(value.toString()))) return true;
+        Object rawFields = state.get("fields");
+        return rawFields instanceof Map<?, ?> values
+                && recordRecipient(instance, (Map<String, Object>) values)
+                        .map(user -> user.getId().equals(currentUser.id())).orElse(false);
+    }
+
+    private Map<String, Object> batchRecordSummary(WorkflowBatchRecord row) {
+        Map<String, Object> state = codec.snapshot(row.getStateJson());
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("rowNumber", row.getRowNumber());
+        result.put("businessKey", row.getBusinessKey());
+        result.put("revision", row.getRevision());
+        result.put("status", row.getStatus());
+        result.put("currentStepId", row.getCurrentStep() == null ? state.get("currentStepId") : row.getCurrentStep().getId());
+        result.put("currentStepLabel", row.getCurrentStep() == null ? state.get("currentStepLabel") : row.getCurrentStep().getLabel());
+        result.put("currentStepType", state.get("currentStepType"));
+        result.put("lastOutcome", row.getLastOutcome() == null ? state.get("lastOutcome") : row.getLastOutcome());
+        result.put("lastReason", row.getLastReason() == null ? state.get("lastReason") : row.getLastReason());
+        result.put("lastActorId", row.getLastActor() == null ? state.get("lastActorId") : row.getLastActor().getId());
+        result.put("lastActorName", row.getLastActor() == null ? null : row.getLastActor().getDisplayName());
+        result.put("lastActionAt", row.getLastActionAt() == null ? state.get("lastActionAt") : row.getLastActionAt());
+        result.put("completedAt", row.getCompletedAt() == null ? state.get("completedAt") : row.getCompletedAt());
+        return result;
+    }
+
+    private Map<String, Object> legacyBatchSummary(Map<String, Object> state) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        for (String key : List.of("rowNumber", "businessKey", "revision", "status", "currentStepId",
+                "currentStepLabel", "currentStepType", "lastOutcome", "lastReason", "lastActorId",
+                "lastActorName", "lastActionAt", "completedAt"))
+            result.put(key, state.get(key));
+        return result;
+    }
+
+    private List<Map<String, Object>> batchSystemActions(WorkflowInstance instance, int rowNumber) {
+        boolean privileged = currentUser.hasRole(SystemRole.ADMIN)
+                || instance.getWorkflow().getOwner().getId().equals(currentUser.id());
+        return systemActionExecutions.findByInstanceIdAndBatchRowNumberOrderByCreatedAtAsc(instance.getId(), rowNumber)
+                .stream().map(execution -> {
+                    Map<String, Object> value = new LinkedHashMap<>();
+                    value.put("id", execution.getId());
+                    value.put("stepLabel", execution.getStep().getLabel());
+                    value.put("status", execution.getStatus());
+                    value.put("attemptCount", execution.getAttemptCount());
+                    value.put("maxAttempts", execution.getMaxAttempts());
+                    value.put("responseStatus", execution.getResponseStatus());
+                    value.put("startedAt", execution.getStartedAt());
+                    value.put("completedAt", execution.getCompletedAt());
+                    value.put("errorMessage", execution.getErrorMessage() == null ? null : privileged
+                            ? execution.getErrorMessage() : "System Action thất bại (execution " + execution.getId() + ")");
+                    if (privileged) {
+                        value.put("httpMethod", execution.getHttpMethod());
+                        value.put("requestUrl", execution.getRequestUrl());
+                        value.put("responseBody", execution.getResponseBody());
+                        value.put("mappedOutputs", codec.snapshot(execution.getMappedOutputsJson()));
+                    }
+                    return value;
+                }).toList();
     }
 
     @SuppressWarnings("unchecked")
@@ -1101,6 +1498,19 @@ public class WorkflowEngineService {
         return steps.findByWorkflowIdOrderByPositionXAsc(workflow.getId()).stream()
                 .filter(step -> step.getType() == StepType.START).findFirst()
                 .orElseThrow(() -> new IllegalStateException("Workflow has no START step"));
+    }
+
+    private FormVersion requireForm(Workflow workflow) {
+        if (workflow.getFormVersion() == null)
+            throw new IllegalStateException("Workflow has no published form attached");
+        return workflow.getFormVersion();
+    }
+
+    private Map<String,Object> startConfig(Workflow workflow,WorkflowStep start){
+        Map<String,Object> config=new LinkedHashMap<>(codec.stepConfig(start));
+        FormVersion form=requireForm(workflow);config.put("instructionForCreator",form.getInstruction());
+        config.put("submissionMode",form.getSubmissionMode());config.put("recordRecipientFieldKey",form.getRecordRecipientFieldKey());
+        config.put("maxBatchRows",form.getMaxBatchRows());return config;
     }
 
     private void requireSubmitAccess(Workflow workflow) {
@@ -1148,7 +1558,10 @@ public class WorkflowEngineService {
                 .batchId(i.getBatchId()).batchRowNumber(i.getBatchRowNumber())
                 .batch(batch).batchTotal(batch ? records.size() : null).batchStatusCounts(counts)
                 .workflowId(i.getWorkflow().getId()).workflowName(i.getWorkflow().getName())
-                .workflowVersion(i.getWorkflow().getVersion()).createdById(i.getCreatedBy().getId())
+                .workflowVersion(i.getWorkflow().getVersion())
+                .formId(i.getFormVersion()==null?null:i.getFormVersion().getForm().getId()).formVersionId(i.getFormVersion()==null?null:i.getFormVersion().getId())
+                .formVersionNumber(i.getFormVersion()==null?null:i.getFormVersion().getVersionNumber()).formName(i.getFormVersion()==null?null:i.getFormVersion().getForm().getName())
+                .createdById(i.getCreatedBy().getId())
                 .createdByName(i.getCreatedBy().getDisplayName())
                 .currentStepId(i.getCurrentStep() == null ? null : i.getCurrentStep().getId())
                 .currentStepLabel(i.getCurrentStep() == null ? (batch && i.getStatus() == InstanceStatus.RUNNING
@@ -1164,8 +1577,143 @@ public class WorkflowEngineService {
                 .requesterWithdrawalAllowed(i.isRequesterWithdrawalAllowed()).build();
     }
 
+    private InstanceResponse instanceSummaryResponse(WorkflowInstance instance) {
+        boolean batch = isBatch(instance);
+        return InstanceResponse.builder().id(instance.getId()).requestCode(instance.getRequestCode())
+                .batchId(instance.getBatchId()).batchRowNumber(instance.getBatchRowNumber()).batch(batch)
+                .workflowId(instance.getWorkflow().getId()).workflowName(instance.getWorkflow().getName())
+                .workflowVersion(instance.getWorkflow().getVersion())
+                .formId(instance.getFormVersion()==null?null:instance.getFormVersion().getForm().getId()).formVersionId(instance.getFormVersion()==null?null:instance.getFormVersion().getId())
+                .formVersionNumber(instance.getFormVersion()==null?null:instance.getFormVersion().getVersionNumber()).formName(instance.getFormVersion()==null?null:instance.getFormVersion().getForm().getName())
+                .createdById(instance.getCreatedBy().getId())
+                .createdByName(instance.getCreatedBy().getDisplayName())
+                .currentStepId(instance.getCurrentStep() == null ? null : instance.getCurrentStep().getId())
+                .currentStepLabel(instance.getCurrentStep() == null
+                        ? (batch && instance.getStatus() == InstanceStatus.RUNNING ? "Nhiều bước đang xử lý" : null)
+                        : instance.getCurrentStep().getLabel())
+                .currentStepType(instance.getCurrentStep() == null ? (batch ? "BATCH" : null)
+                        : instance.getCurrentStep().getType().name())
+                .status(instance.getStatus()).conditionBlocked(instance.isConditionBlocked())
+                .startedAt(instance.getStartedAt()).completedAt(instance.getCompletedAt())
+                .withdrawnAt(instance.getWithdrawnAt()).withdrawalReason(instance.getWithdrawalReason())
+                .requesterWithdrawalAllowed(instance.isRequesterWithdrawalAllowed()).build();
+    }
+
+    private List<com.company.workflowbuilder.dto.CalculatedOutput> taskOutputDefinitions(WorkflowTask task, TaskActionRequest request) {
+        var outputs = request.getCalculatedOutputs() == null
+                ? codec.calculatedOutputs(codec.stepConfig(task.getStep()).get("calculatedOutputs")) : request.getCalculatedOutputs();
+        if (!outputs.isEmpty() && task.getStep().getType() != StepType.REVIEW)
+            throw new IllegalArgumentException("Chỉ Reviewer được bổ sung output tính toán");
+        return outputs;
+    }
+
+    private List<Map<String, Object>> calculateTaskOutputs(WorkflowTask task, TaskActionRequest request, List<Map<String, Object>> rows) {
+        var outputs = taskOutputDefinitions(task, request);
+        if (outputs.isEmpty()) return List.of();
+        var results = com.company.workflowbuilder.service.runtime.OutputCalculator.calculate(outputs, calculationInput(task, outputs, rows));
+        task.setCalculatedResults(codec.write(Map.of("outputs", outputs, "rows", results)));
+        return results;
+    }
+
+    private List<Map<String, Object>> calculationInput(WorkflowTask task,
+            List<com.company.workflowbuilder.dto.CalculatedOutput> outputs, List<Map<String, Object>> rows) {
+        Set<String> previousOutputs = new HashSet<>();
+        tasks.findByInstanceIdAndStepIdAndActivationId(task.getInstance().getId(), task.getStep().getId(), task.getActivationId())
+                .stream().filter(previous -> previous.getStatus() == TaskStatus.COMPLETED && previous.getCalculatedResults() != null)
+                .forEach(previous -> codec.calculatedOutputs(codec.snapshot(previous.getCalculatedResults()).get("outputs"))
+                        .forEach(output -> previousOutputs.add(output.fieldKey())));
+        previousOutputs.retainAll(outputs.stream().map(com.company.workflowbuilder.dto.CalculatedOutput::fieldKey).toList());
+        return rows.stream().map(row -> {
+            Map<String, Object> copy = new LinkedHashMap<>(row);
+            previousOutputs.forEach(copy::remove);
+            return copy;
+        }).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> previewTaskOutputs(UUID taskId, TaskActionRequest request) {
+        WorkflowTask task = tasks.findById(taskId)
+                .orElseThrow(() -> new ResourceNotFoundException("WorkflowTask", "id", taskId));
+        if (task.getStatus() != TaskStatus.PENDING || !task.getAssignee().getId().equals(currentUser.id()))
+            throw new AccessDeniedException("Task không được giao cho user hiện tại");
+        requireRunning(task.getInstance());
+        if (task.getStep().getType() != StepType.REVIEW)
+            throw new IllegalArgumentException("Chỉ Reviewer được tính thử output");
+        List<Map<String, Object>> rows;
+        if (isBatch(task.getInstance())) {
+            rows = batchRecords(task.getInstance()).stream()
+                    .filter(record -> task.getStep().getId().toString().equals(record.get("currentStepId")))
+                    .filter(record -> task.getActivationId().toString().equals(record.get("activationId")))
+                    .map(record -> codec.snapshot(codec.write(record.get("fields")))).toList();
+        } else {
+            var row = codec.snapshot(task.getInstance().getFieldSnapshot());
+            if (request.getFields() != null) {
+                for (var field : fieldValidation.definitions(task.getStep().getId())) {
+                    if (request.getFields().containsKey(field.getFieldKey())) row.put(field.getFieldKey(), request.getFields().get(field.getFieldKey()));
+                }
+            }
+            rows = List.of(row);
+        }
+        var outputs = taskOutputDefinitions(task, request);
+        return com.company.workflowbuilder.service.runtime.OutputCalculator.calculate(outputs, calculationInput(task, outputs, rows));
+    }
+
+    private String prepareReviewResults(WorkflowTask task, TaskActionRequest request) {
+        var items = request.getReviewResults();
+        if (items == null || items.isEmpty()) return request.getComment();
+        if (task.getStep().getType() != StepType.REVIEW)
+            throw new IllegalArgumentException("Chỉ Reviewer được bổ sung kết quả review");
+        if (items.size() > 50)
+            throw new IllegalArgumentException("Tối đa 50 mục kết quả bổ sung");
+        var normalized = new ArrayList<com.company.workflowbuilder.dto.ReviewResultItem>();
+        for (var item : items) {
+            if (item == null || item.label() == null || item.label().isBlank()
+                    || item.content() == null || item.content().isBlank())
+                throw new IllegalArgumentException("Mỗi mục kết quả phải có tên và nội dung");
+            if (item.label().length() > 200 || item.content().length() > 5000)
+                throw new IllegalArgumentException("Tên mục tối đa 200 ký tự, nội dung tối đa 5000 ký tự");
+            normalized.add(new com.company.workflowbuilder.dto.ReviewResultItem(item.label().trim(), item.content().trim()));
+        }
+        task.setReviewResults(codec.write(normalized));
+        return Objects.toString(request.getComment(), "") + "\n\nKết quả bổ sung của Reviewer:\n"
+                + normalized.stream().map(item -> item.label() + ": " + item.content())
+                        .collect(java.util.stream.Collectors.joining("\n"));
+    }
+
+    private void storeReviewHandoff(WorkflowTask task, String action, TaskActionRequest request,
+            List<Map<String, Object>> reviewedRecords) {
+        if (!Boolean.TRUE.equals(codec.stepConfig(task.getStep()).get("forwardReviewHandoff"))) return;
+        User reviewer = currentUser.user();
+        Map<String, Object> handoff = new LinkedHashMap<>();
+        handoff.put("sourceTaskId", task.getId());
+        handoff.put("sourceStepId", task.getStep().getId());
+        handoff.put("sourceStepLabel", task.getStep().getLabel());
+        handoff.put("reviewerId", reviewer.getId());
+        handoff.put("reviewerName", reviewer.getDisplayName());
+        handoff.put("action", action);
+        handoff.put("comment", Objects.toString(request.getComment(), "").trim());
+        handoff.put("additionalResults", codec.reviewResults(task.getReviewResults()));
+        handoff.put("reviewedAt", LocalDateTime.now().toString());
+        handoff.put("batch", isBatch(task.getInstance()));
+        handoff.put("records", reviewedRecords);
+        task.setReviewHandoff(codec.write(handoff));
+    }
+
+    private List<Map<String, Object>> reviewHandoffsFor(WorkflowTask target) {
+        LocalDateTime targetCreatedAt = target.getCreatedAt();
+        return tasks.findByInstanceIdAndStatusOrderByCompletedAtAsc(target.getInstance().getId(), TaskStatus.COMPLETED)
+                .stream()
+                .filter(source -> !source.getId().equals(target.getId()))
+                .filter(source -> source.getReviewHandoff() != null && !source.getReviewHandoff().isBlank())
+                .filter(source -> targetCreatedAt == null || source.getCompletedAt() == null
+                        || !source.getCompletedAt().isAfter(targetCreatedAt))
+                .map(source -> codec.snapshot(source.getReviewHandoff()))
+                .toList();
+    }
+
     private TaskResponse taskResponse(WorkflowTask t) {
         Map<String, Object> stepConfig = codec.stepConfig(t.getStep());
+        Map<String, Object> calculation = t.getCalculatedResults() == null ? Map.of() : codec.snapshot(t.getCalculatedResults());
         boolean batch = isBatch(t.getInstance());
         List<Map<String, Object>> taskRecords = batch ? batchRecords(t.getInstance()).stream()
                 .filter(record -> t.getStep().getId().toString().equals(record.get("currentStepId")))
@@ -1175,15 +1723,41 @@ public class WorkflowEngineService {
                         "fields", record.getOrDefault("fields", Map.of())))
                 .toList() : List.of();
         return TaskResponse.builder().id(t.getId()).instanceId(t.getInstance().getId())
+                .instanceStatus(t.getInstance().getStatus().name())
+                .instanceCurrentStepId(t.getInstance().getCurrentStep() == null ? null : t.getInstance().getCurrentStep().getId())
                 .requestCode(t.getInstance().getRequestCode()).workflowName(t.getInstance().getWorkflow().getName())
                 .requesterName(t.getInstance().getCreatedBy().getDisplayName()).stepId(t.getStep().getId())
                 .stepLabel(t.getStep().getLabel()).stepType(t.getStep().getType().name()).status(t.getStatus().name())
                 .fields(batch ? Map.of() : codec.snapshot(t.getInstance().getFieldSnapshot()))
+                .reviewResults(codec.reviewResults(t.getReviewResults()))
+                .reviewHandoffs(reviewHandoffsFor(t))
+                .calculatedOutputs(codec.calculatedOutputs(t.getStatus() == TaskStatus.PENDING
+                        ? stepConfig.get("calculatedOutputs") : calculation.get("outputs")))
+                .calculatedRows(calculation.get("rows") instanceof List<?> rows ? (List<Map<String, Object>>) rows : List.of())
+                .fieldDefinitions(fieldValidation.definitions(t.getStep().getId()))
                 .batch(batch).batchRecords(taskRecords)
                 .commentRequired(Boolean.TRUE.equals(stepConfig.get("commentRequired")))
-                .fieldsEditable(t.getStatus() == TaskStatus.PENDING && !batch &&
-                        (t.getStep().getType() == StepType.REVIEW || t.getStep().getType() == StepType.ASSIGNMENT))
-                .resultMode(Objects.toString(stepConfig.get("resultMode"), "")).deadlineAt(t.getDeadlineAt())
+                .fieldsEditable(t.getStatus() == TaskStatus.PENDING &&
+                        (t.getStep().getType() == StepType.REVIEW || t.getStep().getType() == StepType.APPROVAL
+                                || t.getStep().getType() == StepType.ASSIGNMENT))
+                .resultMode(Objects.toString(stepConfig.get("resultMode"), ""))
+                .canFail(t.getStep().getType() == StepType.ASSIGNMENT
+                        && connections.findByFromStepId(t.getStep().getId()).stream()
+                                .anyMatch(connection -> connection.getType() == ConnectionType.ASSIGNMENT_FAIL))
+                .deadlineAt(t.getDeadlineAt())
                 .createdAt(t.getCreatedAt()).completedAt(t.getCompletedAt()).build();
+    }
+
+    private TaskResponse taskSummaryResponse(WorkflowTask task) {
+        return TaskResponse.builder().id(task.getId()).instanceId(task.getInstance().getId())
+                .instanceStatus(task.getInstance().getStatus().name())
+                .instanceCurrentStepId(task.getInstance().getCurrentStep() == null ? null : task.getInstance().getCurrentStep().getId())
+                .requestCode(task.getInstance().getRequestCode())
+                .workflowName(task.getInstance().getWorkflow().getName())
+                .requesterName(task.getInstance().getCreatedBy().getDisplayName())
+                .stepId(task.getStep().getId()).stepLabel(task.getStep().getLabel())
+                .stepType(task.getStep().getType().name()).status(task.getStatus().name())
+                .deadlineAt(task.getDeadlineAt()).createdAt(task.getCreatedAt())
+                .completedAt(task.getCompletedAt()).build();
     }
 }

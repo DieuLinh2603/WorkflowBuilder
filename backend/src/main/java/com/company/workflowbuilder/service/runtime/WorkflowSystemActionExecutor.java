@@ -30,37 +30,65 @@ public class WorkflowSystemActionExecutor {
     private final NotificationCenterService notificationCenter;
     private final NotificationStepDeliveryService notificationDelivery;
     private final WorkflowJsonCodec codec;
+    private final SystemActionQueueService queue;
+
+    public enum Outcome { SUCCESS, FAILURE, QUEUED }
 
     @SuppressWarnings("unchecked")
-    public void execute(WorkflowInstance instance, WorkflowStep step) {
+    public boolean execute(WorkflowInstance instance, WorkflowStep step) {
+        return execute(instance, step, List.of(codec.snapshot(instance.getFieldSnapshot())));
+    }
+
+    public boolean execute(WorkflowInstance instance, WorkflowStep step, List<Map<String, Object>> calculationRows) {
+        return executeOutcome(instance, step, calculationRows, null) == Outcome.SUCCESS;
+    }
+
+    public Outcome executeOutcome(WorkflowInstance instance, WorkflowStep step,
+            List<Map<String, Object>> calculationRows, Integer batchRowNumber) {
         Map<String, Object> action = codec.stepConfig(step);
         String actionType = Objects.toString(action.get("actionType"), "");
-        if (actionType.isBlank()) return;
+        if (actionType.isBlank()) return Outcome.SUCCESS;
+        if ("API_CALL".equals(actionType) && action.get("connectorId") != null) {
+            try {
+                var execution = queue.enqueue(instance, step, codec.snapshot(instance.getFieldSnapshot()), batchRowNumber);
+                audit(instance, step, "SYSTEM_ACTION_QUEUED", execution.getId().toString());
+                return Outcome.QUEUED;
+            } catch (RuntimeException exception) {
+                audit(instance, step, "SYSTEM_ACTION_FAILED", exception.getMessage());
+                return Outcome.FAILURE;
+            }
+        }
         String policy = Objects.toString(action.get("failurePolicy"), "STOP");
         int attempts = "RETRY".equals(policy)
                 ? Math.max(1, ((Number) action.getOrDefault("retryCount", 3)).intValue()) : 1;
         RuntimeException last = null;
         for (int attempt = 1; attempt <= attempts; attempt++) {
             try {
-                executeOnce(instance, step, action, actionType);
+                executeOnce(instance, step, action, actionType, calculationRows);
                 audit(instance, step, "SYSTEM_ACTION_COMPLETED", actionType);
-                return;
+                return Outcome.SUCCESS;
             } catch (RuntimeException exception) {
                 last = exception;
                 audit(instance, step, "SYSTEM_ACTION_FAILED", exception.getMessage());
             }
         }
-        if ("CONTINUE".equals(policy)) return;
-        throw new IllegalStateException("System Action failed: "
-                + (last == null ? "unknown error" : last.getMessage()), last);
+        return Outcome.FAILURE;
     }
 
     @SuppressWarnings("unchecked")
     private void executeOnce(WorkflowInstance instance, WorkflowStep step, Map<String, Object> action,
-            String actionType) {
+            String actionType, List<Map<String, Object>> calculationRows) {
         Map<String, Object> snapshot = codec.snapshot(instance.getFieldSnapshot());
         List<Map<String, Object>> mappings = (List<Map<String, Object>>) action.getOrDefault("mappings", List.of());
         switch (actionType) {
+            case "CALCULATE_OUTPUT" -> {
+                var outputs = codec.calculatedOutputs(action.get("calculatedOutputs"));
+                if (outputs.isEmpty()) throw new IllegalArgumentException("Cần ít nhất một cột output tính toán");
+                var calculated = OutputCalculator.calculate(outputs, calculationRows);
+                // The current row is first; aggregates use every supplied row.
+                snapshot.putAll(calculated.get(0));
+                saveSnapshot(instance, snapshot);
+            }
             case "UPDATE_DATA" -> {
                 for (Map<String, Object> mapping : mappings) {
                     String target = Objects.toString(mapping.get("targetField"), "");

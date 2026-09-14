@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.company.workflowbuilder.service.WorkflowEditorAccessTest
+-------------------------------------------------------------------------------
+Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.743 s -- in com.company.workflowbuilder.service.WorkflowEditorAccessTest

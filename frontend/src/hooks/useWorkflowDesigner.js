@@ -54,7 +54,7 @@ export default function useWorkflowDesigner() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(stepData),
-      successToast: false
+      toast: false
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -121,6 +121,16 @@ export default function useWorkflowDesigner() {
     return updated;
   };
 
+  const updateWorkflowMetadata = async (workflowId, data) => {
+    const res = await apiFetch(`/api/workflows/${workflowId}/metadata`, {
+      method: 'PUT', body: JSON.stringify(data), successMessage: 'Đã cập nhật thông tin workflow.'
+    });
+    if (!res.ok) throw new Error(await apiError(res, 'Không thể cập nhật thông tin workflow'));
+    const updated = await res.json();
+    setWorkflow(updated);
+    return updated;
+  };
+
   // ── Validate ──
   const validateWorkflow = async (workflowId) => {
     const res = await apiFetch(`/api/workflows/${workflowId}/validate`, { method: 'POST' });
@@ -131,7 +141,7 @@ export default function useWorkflowDesigner() {
   };
 
   const createConnection = async (workflowId, data) => {
-    const res = await apiFetch(`/api/workflows/${workflowId}/connections`, { method: 'POST', body: JSON.stringify(data), successToast: false });
+    const res = await apiFetch(`/api/workflows/${workflowId}/connections`, { method: 'POST', body: JSON.stringify(data), toast: false });
     if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || 'Không thể tạo connection'); }
     const created = await res.json(); setConnections(v => [...v, created]); return created;
   };
@@ -179,6 +189,7 @@ export default function useWorkflowDesigner() {
     loadWorkflow,
     addStep,
     updateStep,
+    updateWorkflowMetadata,
     deleteStep,
     saveLayout,
     validateWorkflow

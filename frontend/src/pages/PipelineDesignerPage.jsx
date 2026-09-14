@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Braces, CalendarClock, Check, ChevronLeft, ChevronRight, Database,
-  Eye, FileSpreadsheet, Filter, GitMerge, Plus, RefreshCw, Trash2,
+  Eye, FileSpreadsheet, Filter, GitMerge, PauseCircle, Plus, RefreshCw, RotateCw, Trash2,
 } from 'lucide-react';
 import { apiError, apiFetch } from '../api';
+import DeletePipelineModal from '../components/DeletePipelineModal';
 
 const STEPS = [
   { label: 'Nguồn dữ liệu', icon: Database },
@@ -53,6 +54,7 @@ export default function PipelineDesignerPage() {
   const [files, setFiles] = useState({});
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  const [deleteState, setDeleteState] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -94,6 +96,11 @@ export default function PipelineDesignerPage() {
     if (a.ok) setPipeline(await a.json());
     if (b.ok) setRuns(await b.json());
   };
+  useEffect(() => {
+    if (busy !== 'run') return undefined;
+    const timer = window.setInterval(refreshMetadata, 1500);
+    return () => window.clearInterval(timer);
+  }, [busy, id]);
   const saveDraft = async (toast = true) => {
     setError('');
     const response = await apiFetch(`/api/pipelines/${id}`, { method: 'PUT', toast, body: JSON.stringify(payload()) });
@@ -187,18 +194,59 @@ export default function PipelineDesignerPage() {
     setBusy(name); setError('');
     try {
       const response = await apiFetch(`/api/pipelines/${id}/${name}`, {
-        method: 'POST', successMessage: name === 'publish' ? 'Đã kích hoạt pipeline.' : 'Pipeline đã chạy xong.',
+        method: 'POST', toast: name !== 'run', successMessage: 'Đã kích hoạt pipeline.',
       });
       if (!response.ok) throw new Error(await apiError(response));
+      if (name === 'run') {
+        const result = await response.json();
+        if (result.status === 'PAUSED') {
+          window.dispatchEvent(new CustomEvent('wf:toast', { detail: { type: 'info', message: 'Lượt chạy pipeline đã được tạm ngừng.' } }));
+        } else if (result.status !== 'SUCCESS' && result.status !== 'NO_CHANGES') {
+          const stage = result.errorStage ? ` tại bước ${result.errorStage}` : '';
+          const retry = result.status === 'RETRY' ? ' Hệ thống sẽ tự thử lại.' : '';
+          throw new Error(`Pipeline chưa chạy xong${stage}: ${result.errorMessage || 'Không xác định được lỗi.'}${retry}`);
+        }
+        if (result.status !== 'PAUSED') {
+          const message = result.status === 'NO_CHANGES'
+            ? 'Pipeline đã chạy xong, không có dữ liệu thay đổi.'
+            : `Pipeline đã chạy xong: ${result.outputCount || 0} dòng, ${result.changedCount || 0} dòng mới hoặc thay đổi.`;
+          window.dispatchEvent(new CustomEvent('wf:toast', { detail: { type: 'success', message } }));
+        }
+      }
       await refreshMetadata();
     } catch (reason) { setError(reason.message); } finally { setBusy(''); }
   };
+  const pauseRun = async () => {
+    setError('');
+    const response = await apiFetch(`/api/pipelines/${id}/pause`, { method: 'POST', toast: false });
+    if (!response.ok) setError(await apiError(response, 'Không thể tạm ngừng pipeline.'));
+    else window.dispatchEvent(new CustomEvent('wf:toast', { detail: { type: 'success', message: 'Đã tạm ngừng lượt chạy pipeline.' } }));
+    await refreshMetadata();
+  };
+  const resumeRun = async runId => {
+    setBusy(`resume-${runId}`); setError('');
+    try {
+      const response = await apiFetch(`/api/pipelines/${id}/runs/${runId}/resume`, { method: 'POST', toast: false });
+      if (!response.ok) throw new Error(await apiError(response, 'Không thể tiếp tục lượt chạy pipeline.'));
+      const result = await response.json();
+      const message = result.status === 'NO_CHANGES' ? 'Pipeline đã chạy xong và không có dữ liệu thay đổi.' : result.status === 'SUCCESS' ? 'Pipeline đã tiếp tục và chạy xong.' : 'Đã tiếp tục lượt chạy pipeline.';
+      window.dispatchEvent(new CustomEvent('wf:toast', { detail: { type: 'success', message } }));
+      await refreshMetadata();
+    } catch (reason) { setError(reason.message); } finally { setBusy(''); }
+  };
+  const askDeletePipeline = async () => {
+    setError(''); setDeleteState({ pipeline, loading: true, impact: null, confirmation: '', deleting: false });
+    const response = await apiFetch(`/api/pipelines/${id}/deletion-impact`, { toast: false });
+    if (!response.ok) { setDeleteState(null); return setError(await apiError(response, 'Không thể kiểm tra dữ liệu liên quan đến pipeline.')); }
+    const impact = await response.json();
+    setDeleteState(current => current ? { ...current, loading: false, impact } : null);
+  };
   const deletePipeline = async () => {
-    if (!window.confirm(`Xóa pipeline “${pipeline.name}”? Dataset và lịch sử liên quan có thể bị ảnh hưởng.`)) return;
-    setBusy('delete'); setError('');
-    const response = await apiFetch(`/api/pipelines/${id}`, { method: 'DELETE' });
-    if (!response.ok) { setBusy(''); return setError(await apiError(response)); }
-    navigate('/pipelines');
+    if (!deleteState?.impact?.canDelete || deleteState.confirmation !== pipeline.name) return;
+    setDeleteState(current => ({ ...current, deleting: true }));
+    const response = await apiFetch(`/api/pipelines/${id}`, { method: 'DELETE', successMessage: `Đã xóa pipeline “${pipeline.name}” cùng dữ liệu liên quan.` });
+    if (!response.ok) { setDeleteState(current => ({ ...current, deleting: false })); return setError(await apiError(response)); }
+    setDeleteState(null); navigate('/pipelines');
   };
 
   const addSource = () => {
@@ -222,14 +270,17 @@ export default function PipelineDesignerPage() {
   }); };
   const uploadCsv = async index => {
     const source = definition.sources[index], file = files[index];
+    if (!source.alias?.trim()) return setError('Vui lòng nhập tên gợi nhớ trước khi tải file CSV.');
+    if (!/^[a-zA-Z][a-zA-Z0-9_]{0,99}$/.test(source.alias.trim())) return setError('Tên gợi nhớ phải bắt đầu bằng chữ và chỉ gồm chữ, số, dấu gạch dưới.');
     if (!file) return setError('Vui lòng chọn một file CSV.');
+    if (!file.name.toLowerCase().endsWith('.csv')) return setError('Chỉ chấp nhận file có phần mở rộng .csv.');
     setBusy(`upload-${index}`); setError('');
     try {
       const body = new FormData(); body.append('file', file);
       const response = await apiFetch(`/api/pipelines/${id}/files?alias=${encodeURIComponent(source.alias)}`, { method: 'POST', body });
       if (!response.ok) throw new Error(await apiError(response));
       const uploaded = await response.json();
-      updateSource(index, { fileVersionId: uploaded.id, fileName: uploaded.fileName, delimiter: source.delimiter || ',' });
+      updateSource(index, { fileVersionId: uploaded.id, fileName: uploaded.fileName, delimiter: source.delimiter || 'AUTO' });
     } catch (reason) { setError(reason.message); } finally { setBusy(''); }
   };
   const addJoin = () => setDefinition(current => ({ ...current, joins: [...current.joins, { rightAlias: current.sources[1]?.alias || '', type: 'INNER', leftKeys: [], rightKeys: [], cardinality: 'ONE_TO_ONE' }] }));
@@ -287,8 +338,10 @@ export default function PipelineDesignerPage() {
         <button onClick={() => saveDraft().catch(reason => setError(reason.message))} disabled={isBusy} className="rounded-lg border bg-white px-4 py-2 text-sm font-semibold disabled:opacity-50">Lưu bản nháp</button>
         <button onClick={previewPipeline} disabled={isBusy} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy === 'preview' ? 'Đang kiểm tra...' : 'Kiểm tra pipeline'}</button>
         <button onClick={() => action('publish')} disabled={isBusy || pipeline.status !== 'PREVIEWED'} className="btn-primary disabled:opacity-40">Kích hoạt</button>
-        <button onClick={() => action('run')} disabled={isBusy || pipeline.status !== 'PUBLISHED'} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">Chạy ngay</button>
-        <button onClick={deletePipeline} disabled={isBusy} className="flex items-center gap-1 rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 disabled:opacity-40"><Trash2 size={15}/>Xóa</button>
+        {busy === 'run' || ['QUEUED', 'RUNNING', 'RETRY'].includes(pipeline.activeRun?.status)
+          ? <button onClick={pauseRun} className="flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700"><PauseCircle size={15}/>Tạm ngừng</button>
+          : <button onClick={() => action('run')} disabled={isBusy || pipeline.status !== 'PUBLISHED' || pipeline.activeRun?.status === 'PAUSED'} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">Chạy ngay</button>}
+        <button onClick={askDeletePipeline} disabled={isBusy} className="flex items-center gap-1 rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 disabled:opacity-40"><Trash2 size={15}/>Xóa</button>
       </div>
     </header>
     {error && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
@@ -305,7 +358,8 @@ export default function PipelineDesignerPage() {
       <div className="flex items-center justify-between"><button disabled={step === 0} onClick={() => setStep(value => value - 1)} className="flex items-center gap-1 rounded-lg border bg-white px-4 py-2 text-sm font-semibold disabled:opacity-40"><ChevronLeft size={16} />Quay lại</button>{step < STEPS.length - 1 ? <button onClick={() => setStep(value => value + 1)} className="flex items-center gap-1 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">Tiếp tục<ChevronRight size={16} /></button> : <button onClick={previewPipeline} disabled={isBusy} className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"><Eye size={16} />Kiểm tra pipeline</button>}</div>
     </>}
     {(outputPreview || preview || (step === 1 && discovery)) && <DataPreview title={outputPreview ? 'Dữ liệu đầu ra sau khi áp dụng cấu hình' : preview ? 'Kết quả kiểm tra chính thức' : 'Kết quả sau khi ghép và xử lý'} result={outputPreview || preview || discovery} onPage={outputPreview ? page => previewOutput(page) : preview ? null : page => discover(false, page)} />}
-    <RunHistory runs={runs} />
+    <RunHistory runs={runs} busy={busy} onPause={pauseRun} onResume={resumeRun} />
+    {deleteState && <DeletePipelineModal state={deleteState} setState={setDeleteState} onConfirm={deletePipeline}/>}
   </div>;
 }
 
@@ -327,7 +381,7 @@ function SourcesStep({ sources, connectors, files, busy, previews, onFiles, onAd
         <Field label="Loại nguồn"><select className="input-field" value={source.type || 'REST'} onChange={e => onUpdate(index, { type: e.target.value, connectorId: undefined })}><option value="REST">REST API</option><option value="POSTGRESQL">PostgreSQL</option><option value="CSV">File CSV</option></select></Field>
         {source.type !== 'CSV' && <Field label="Kết nối"><select className="input-field" value={source.connectorId || ''} onChange={e => onUpdate(index, { connectorId: e.target.value })}><option value="">-- Chọn connector --</option>{matching.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>{!matching.length && <Hint>Chưa có connector {source.type}. Hãy tạo ở màn hình Connectors.</Hint>}</Field>}
         {source.type === 'REST' && <>
-          <Field label="Danh sách nằm trong trường"><input className="input-field" value={source.recordPath || ''} onChange={e => onUpdate(index, { recordPath: e.target.value })} placeholder="Để trống nếu API trả thẳng một mảng" /><Hint>Ví dụ: data hoặc result.items</Hint></Field>
+          <Field label="Danh sách nằm trong trường"><input className="input-field" value={source.recordPath || ''} onChange={e => onUpdate(index, { recordPath: e.target.value })} placeholder="Có thể để trống để hệ thống tự nhận diện" /><Hint>Ví dụ: data hoặc result.items. Nếu response chỉ có một mảng, hệ thống sẽ tự tìm.</Hint></Field>
           <Field label="Phân trang"><select className="input-field" value={source.pagination?.type || 'NONE'} onChange={e => onUpdate(index, { pagination: paginationConfig(e.target.value, source.pagination) })}><option value="NONE">Không phân trang</option><option value="PAGE">Theo số trang</option><option value="OFFSET">Theo offset</option><option value="CURSOR">Theo cursor</option></select></Field>
           {source.pagination?.type !== 'NONE' && <Field label="Số dòng mỗi trang"><input type="number" min="1" className="input-field" value={source.pagination?.pageSize || 100} onChange={e => onUpdate(index, { pagination: { ...source.pagination, pageSize: Number(e.target.value) } })} /></Field>}
           {source.pagination?.type === 'PAGE' && <><Field label="Tên tham số số trang"><input className="input-field" value={source.pagination?.pageParam || 'page'} onChange={e => onUpdate(index, { pagination: { ...source.pagination, pageParam: e.target.value } })} placeholder="page" /><Hint>JSONPlaceholder sử dụng _page</Hint></Field><Field label="Tên tham số kích thước trang"><input className="input-field" value={source.pagination?.sizeParam || 'size'} onChange={e => onUpdate(index, { pagination: { ...source.pagination, sizeParam: e.target.value } })} placeholder="size" /><Hint>JSONPlaceholder sử dụng _limit</Hint></Field><Field label="Trang bắt đầu"><input type="number" min="0" className="input-field" value={source.pagination?.startPage ?? 1} onChange={e => onUpdate(index, { pagination: { ...source.pagination, startPage: Number(e.target.value) } })} /></Field></>}
@@ -420,8 +474,8 @@ function DataPreview({ title, result, onPage }) {
   return <section className="rounded-xl border bg-white p-5"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-bold">{title}</h2><p className="text-xs text-gray-500">{result.count || 0} dòng{rows.length ? ` · đang xem ${firstRow}–${Math.min(firstRow + rows.length - 1, result.count || 0)}` : ''}</p></div><div className="flex flex-wrap gap-2">{schemaEntries.slice(0, 12).map(([key, type]) => <span key={key} className={`rounded-full px-2 py-1 text-[10px] ${key.includes('.') ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>{key}: {type}</span>)}</div></div>{!rows.length ? <Empty text="Nguồn dữ liệu không trả về dòng nào." /> : <div className="mt-4 max-h-96 overflow-auto rounded-lg border"><table className="min-w-full whitespace-nowrap text-left text-xs"><thead className="sticky top-0 bg-slate-50"><tr>{columns.map(column => <th key={column} className={`p-3 ${column.includes('.') ? 'bg-blue-50 text-blue-700' : 'text-gray-500'}`}>{column}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={index} className="border-t">{columns.map(column => <td key={column} className={`max-w-64 truncate p-3 text-slate-700 ${column.includes('.') ? 'bg-blue-50/30' : ''}`}>{displayValue(row[column])}</td>)}</tr>)}</tbody></table></div>}{onPage && totalPages > 1 && <div className="mt-4 flex items-center justify-between"><button disabled={!result.hasPrevious} onClick={() => onPage(page - 1)} className="flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-40"><ChevronLeft size={14}/>Trang trước</button><span className="text-xs text-gray-500">Trang {page + 1}/{totalPages}</span><button disabled={!result.hasNext} onClick={() => onPage(page + 1)} className="flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-40">Trang sau<ChevronRight size={14}/></button></div>}</section>;
 }
 
-function RunHistory({ runs }) {
-  return <section className="rounded-xl border bg-white p-5"><h2 className="mb-3 font-bold">Lịch sử chạy</h2>{!runs.length ? <p className="text-xs text-gray-400">Pipeline chưa được chạy lần nào.</p> : <div className="overflow-auto"><table className="min-w-full text-left text-sm"><thead><tr className="text-xs text-gray-500"><th className="p-2">Trạng thái</th><th>Kiểu chạy</th><th>Đầu vào</th><th>Đầu ra</th><th>Thay đổi</th><th>Lần thử</th><th>Lỗi</th></tr></thead><tbody>{runs.map(run => <tr key={run.id} className="border-t"><td className="p-2 font-semibold">{run.status}</td><td>{run.triggerType}</td><td>{run.inputCount ?? '—'}</td><td>{run.outputCount ?? '—'}</td><td>{run.changedCount ?? '—'}</td><td>{run.attemptCount}</td><td className="max-w-72 text-xs text-red-500">{run.errorMessage || '—'}</td></tr>)}</tbody></table></div>}</section>;
+function RunHistory({ runs, busy, onPause, onResume }) {
+  return <section className="rounded-xl border bg-white p-5"><h2 className="mb-3 font-bold">Lịch sử chạy</h2>{!runs.length ? <p className="text-xs text-gray-400">Pipeline chưa được chạy lần nào.</p> : <div className="overflow-auto"><table className="min-w-full text-left text-sm"><thead><tr className="text-xs text-gray-500"><th className="p-2">Trạng thái</th><th>Kiểu chạy</th><th>Đầu vào</th><th>Đầu ra</th><th>Thay đổi</th><th>Lần thử</th><th>Lỗi</th><th>Thao tác</th></tr></thead><tbody>{runs.map(run => <tr key={run.id} className="border-t"><td className={`p-2 font-semibold ${run.status === 'PAUSED' ? 'text-amber-600' : ''}`}>{run.status === 'PAUSED' ? 'TẠM NGỪNG' : run.status}</td><td>{run.triggerType}</td><td>{run.inputCount ?? '—'}</td><td>{run.outputCount ?? '—'}</td><td>{run.changedCount ?? '—'}</td><td>{run.attemptCount}</td><td className="max-w-72 text-xs text-red-500">{run.errorMessage || '—'}</td><td>{['QUEUED','RUNNING','RETRY'].includes(run.status) ? <button type="button" onClick={onPause} className="flex items-center gap-1 text-xs font-semibold text-amber-600"><PauseCircle size={13}/>Tạm ngừng</button> : run.status === 'PAUSED' ? <button type="button" disabled={Boolean(busy)} onClick={()=>onResume(run.id)} className="flex items-center gap-1 text-xs font-semibold text-emerald-600 disabled:opacity-40"><RotateCw size={13}/>Tiếp tục</button> : '—'}</td></tr>)}</tbody></table></div>}</section>;
 }
 
 function Field({ label, children, wide = false }) { return <label className={`block text-xs font-bold text-gray-600 ${wide ? 'md:col-span-2' : ''}`}><span className="mb-1 block">{label}</span>{children}</label>; }

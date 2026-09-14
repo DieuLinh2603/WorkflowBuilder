@@ -180,15 +180,20 @@ export default function WorkflowDataBindingModal({ workflow, onClose }) {
         <label className="text-xs font-bold text-gray-500">TRIGGER
           <select className="input-field mt-1" value={triggerMode} onChange={event => setTriggerMode(event.target.value)}>
             <option value="AUTO_ON_DATASET_SUCCESS">Tự động khi Pipeline chạy thành công</option>
-            <option value="MANUAL">Chỉ chạy khi tôi bấm “Đưa dữ liệu vào Workflow”</option>
+            <option value="MANUAL">Thủ công — tôi bấm nút đưa dữ liệu vào Workflow</option>
           </select>
         </label>
       </div>
       <div className={`mt-3 rounded-xl border px-4 py-3 text-xs leading-5 ${triggerMode === 'MANUAL' ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>
         {triggerMode === 'MANUAL'
-          ? <><b>Bạn quyết định thời điểm chạy.</b> Sau khi lưu Binding, bấm “Đưa dữ liệu mới vào Workflow” ở phía dưới. Hệ thống lấy Dataset mới nhất và chỉ gửi những dòng chưa xử lý hoặc đã thay đổi.</>
+          ? <><b>Bạn quyết định thời điểm chạy.</b><span className="mt-1 block">1. Lưu Binding và mapping. 2. Bấm nút <b>“Đưa dữ liệu mới vào Workflow”</b> ngay bên dưới. Hệ thống lấy Dataset mới nhất và chỉ gửi những dòng chưa xử lý hoặc đã thay đổi.</span></>
           : <><b>Hệ thống tự chạy.</b> Mỗi khi Pipeline chạy xong, các dòng mới hoặc thay đổi sẽ tự động được đưa vào Workflow; bạn không cần bấm thêm nút nào.</>}
       </div>
+
+      {triggerMode === 'MANUAL' && <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-emerald-300 bg-emerald-50 px-4 py-4">
+        <div><p className="text-sm font-bold text-emerald-800">Thao tác chạy thủ công</p><p className="mt-1 text-xs text-emerald-700">{currentBinding ? `Binding đã sẵn sàng · đã xử lý đến Dataset v${currentBinding.lastConsumedVersion}` : 'Hãy hoàn tất mapping và lưu Binding trước.'}</p></div>
+        <button type="button" disabled={!currentBinding || saving || runningBindingId === currentBinding?.id} onClick={() => currentBinding && runBinding(currentBinding.id)} className="rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40">{runningBindingId === currentBinding?.id ? 'Đang đưa dữ liệu...' : 'Đưa dữ liệu mới vào Workflow'}</button>
+      </div>}
 
       <section className="mt-5 overflow-hidden rounded-xl border border-grayBorder">
         <div className="flex items-center justify-between bg-slate-50 px-4 py-3">

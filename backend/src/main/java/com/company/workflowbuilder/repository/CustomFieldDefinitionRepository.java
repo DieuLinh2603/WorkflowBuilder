@@ -14,5 +14,7 @@ public interface CustomFieldDefinitionRepository extends JpaRepository<CustomFie
 
     boolean existsByStepIdAndFieldKey(UUID stepId, String fieldKey);
 
+    boolean existsByStepWorkflowIdAndFieldKey(UUID workflowId, String fieldKey);
+
     List<CustomFieldDefinition> findByStepWorkflowId(UUID workflowId);
 }

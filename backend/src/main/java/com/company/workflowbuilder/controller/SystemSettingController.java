@@ -24,8 +24,13 @@ public class SystemSettingController {
     }
 
     @PutMapping("/reminder-endpoints")
-    public Map<String, Boolean> endpoints(@RequestBody Map<String, String> body) {
-        body.forEach(service::updateEndpoint);
-        return Map.of("updated", true);
+    public Map<String, Object> updateEndpoints(@RequestBody Map<String, String> body) {
+        service.updateEndpoints(body);
+        return service.reminderEndpointStatus();
+    }
+
+    @GetMapping("/reminder-endpoints")
+    public Map<String, Object> getEndpoints() {
+        return service.reminderEndpointStatus();
     }
 }

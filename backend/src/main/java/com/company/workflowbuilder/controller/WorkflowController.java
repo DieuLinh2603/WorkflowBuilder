@@ -1,6 +1,7 @@
 package com.company.workflowbuilder.controller;
 
 import com.company.workflowbuilder.dto.request.WorkflowCreateRequest;
+import com.company.workflowbuilder.dto.request.WorkflowMetadataUpdateRequest;
 import com.company.workflowbuilder.dto.response.WorkflowResponse;
 import com.company.workflowbuilder.dto.response.WorkflowStepResponse;
 import com.company.workflowbuilder.dto.response.CustomFieldResponse;
@@ -63,6 +64,14 @@ public class WorkflowController {
     @Operation(summary = "Get workflow detail by ID")
     public ResponseEntity<WorkflowResponse> getWorkflow(@PathVariable UUID id) {
         return ResponseEntity.ok(workflowService.getWorkflowById(id));
+    }
+
+    @PutMapping("/{id}/metadata")
+    @PreAuthorize("hasAnyRole('ADMIN', 'WORKFLOW_OWNER', 'EDITOR', 'VIEWER')")
+    @Operation(summary = "Update the name and description of a workflow draft")
+    public ResponseEntity<WorkflowResponse> updateMetadata(@PathVariable UUID id,
+            @Valid @RequestBody WorkflowMetadataUpdateRequest request) {
+        return ResponseEntity.ok(workflowService.updateMetadata(id, request));
     }
 
     @GetMapping("/{id}/active")
@@ -154,6 +163,12 @@ public class WorkflowController {
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         workflowService.deleteWorkflow(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/editor-candidates")
+    @PreAuthorize("hasAnyRole('ADMIN','WORKFLOW_OWNER')")
+    public ResponseEntity<java.util.List<com.company.workflowbuilder.dto.response.WorkflowEditorResponse>> editorCandidates(@PathVariable UUID id) {
+        return ResponseEntity.ok(workflowService.editorCandidates(id));
     }
 
     @PutMapping("/{id}/editors/{userId}")

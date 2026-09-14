@@ -53,8 +53,10 @@ class WorkflowServiceDeleteStepTest {
         WorkflowStep middle = step(workflow, StepType.NOTIFICATION);
         WorkflowStep after = step(workflow, StepType.END);
         WorkflowConnection incoming = connection(workflow, before, middle, ConnectionType.IF);
+        incoming.setPriority(12);
         incoming.getClauses().add(WorkflowConditionClause.builder().connection(incoming).fieldKey("amount")
-                .operator(ConditionOperator.GT).expectedValue("100").displayOrder(0).build());
+                .operator(ConditionOperator.GT).expectedValue("100")
+                .expressionJson("{\"type\":\"COMPARE\"}").displayOrder(0).build());
         WorkflowConnection outgoing = connection(workflow, middle, after, ConnectionType.DEFAULT);
         when(steps.findById(middle.getId())).thenReturn(Optional.of(middle));
         when(connections.findByWorkflowId(workflow.getId())).thenReturn(List.of(incoming, outgoing));
@@ -65,7 +67,9 @@ class WorkflowServiceDeleteStepTest {
         assertEquals(ConnectionType.IF, result.getReplacementConnection().getType());
         assertEquals(before.getId(), result.getReplacementConnection().getFromStepId());
         assertEquals(after.getId(), result.getReplacementConnection().getToStepId());
+        assertEquals(12, result.getReplacementConnection().getPriority());
         assertEquals("amount", result.getReplacementConnection().getClauses().get(0).getFieldKey());
+        assertEquals("COMPARE", result.getReplacementConnection().getClauses().get(0).getExpression().get("type"));
         verify(connections).deleteAll(List.of(incoming, outgoing));
         verify(steps).delete(middle);
     }

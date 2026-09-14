@@ -1,28 +1,13 @@
 import { useState, useEffect } from 'react';
 import { X, Search } from 'lucide-react';
-
-const WORKFLOW_TYPES = [
-  'Phê duyệt chi phí',
-  'Phê duyệt mua sắm',
-  'Phê duyệt hợp đồng',
-  'Nhân sự',
-  'Pháp lý',
-  'Khác'
-];
-
-const MODULES = [
-  'Hành chính - Nhân sự',
-  'Kinh doanh',
-  'Kế toán - Tài chính',
-  'IT',
-  'Khác'
-];
+import { apiError, apiFetch } from '../api';
 
 export default function CreateWorkflowModal({ isOpen, onClose, onCreate, currentUser, fetchDropdownUsers }) {
   const isAdmin = currentUser?.systemRoles?.includes('ADMIN');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [workflowType, setWorkflowType] = useState('');
+  const [customWorkflowType, setCustomWorkflowType] = useState('');
   const [module, setModule] = useState('');
   const [ownerId, setOwnerId] = useState('');
   const [owners, setOwners] = useState([]);
@@ -30,15 +15,24 @@ export default function CreateWorkflowModal({ isOpen, onClose, onCreate, current
   const [ownerSearch, setOwnerSearch] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [workflowTypes, setWorkflowTypes] = useState([]);
+  const [modules, setModules] = useState([]);
 
   useEffect(() => {
     if (isOpen) {
       setName('');
       setDescription('');
       setWorkflowType('');
+      setCustomWorkflowType('');
       setModule('');
       setOwnerId(currentUser?.id || '');
       setError('');
+      Promise.all([apiFetch('/api/metadata/workflow-types'), apiFetch('/api/metadata/modules')])
+        .then(async ([typeResponse, moduleResponse]) => {
+          if (!typeResponse.ok || !moduleResponse.ok) throw new Error(await apiError(!typeResponse.ok ? typeResponse : moduleResponse, 'Không thể tải danh mục nghiệp vụ'));
+          setWorkflowTypes(await typeResponse.json());
+          setModules(await moduleResponse.json());
+        }).catch(requestError => setError(requestError.message));
 
       // Fetch users for owner dropdown
       if (fetchDropdownUsers && isAdmin) {
@@ -67,6 +61,14 @@ export default function CreateWorkflowModal({ isOpen, onClose, onCreate, current
       setError('Không xác định được tài khoản hiện tại. Vui lòng đăng nhập lại.');
       return;
     }
+    if (!workflowType || !module) {
+      setError('Vui lòng chọn đầy đủ Loại Workflow và Module áp dụng.');
+      return;
+    }
+    if (workflowType === 'CUSTOM' && !customWorkflowType.trim()) {
+      setError('Vui lòng nhập loại Workflow khác.');
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {
@@ -74,6 +76,7 @@ export default function CreateWorkflowModal({ isOpen, onClose, onCreate, current
         name: name.trim(),
         description: description.trim() || null,
         workflowType: workflowType || null,
+        customWorkflowType: workflowType === 'CUSTOM' ? customWorkflowType.trim() : null,
         module: module || null,
         ...(isAdmin ? { ownerId: ownerId || null } : {})
       });
@@ -138,28 +141,38 @@ export default function CreateWorkflowModal({ isOpen, onClose, onCreate, current
             {/* Loại + Module */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Loại Workflow</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Loại Workflow <span className="text-red-500">*</span></label>
                 <select
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-colors"
                   value={workflowType}
-                  onChange={e => setWorkflowType(e.target.value)}
+                  onChange={e => { setWorkflowType(e.target.value); if (e.target.value !== 'CUSTOM') setCustomWorkflowType(''); }}
+                  required
                 >
-                  <option value="">Chọn loại...</option>
-                  {WORKFLOW_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  <option value="" disabled>Chọn loại</option>
+                  {workflowTypes.map(t => <option key={t.code} value={t.code}>{t.code === 'CUSTOM' ? 'Khác' : t.name}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Module áp dụng</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Module áp dụng <span className="text-red-500">*</span></label>
                 <select
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-colors"
                   value={module}
                   onChange={e => setModule(e.target.value)}
+                  required
                 >
                   <option value="">Chọn module...</option>
-                  {MODULES.map(m => <option key={m} value={m}>{m}</option>)}
+                  {modules.map(m => <option key={m.code} value={m.code}>{m.name}</option>)}
                 </select>
               </div>
             </div>
+            <div className="rounded-lg border border-blue-100 bg-blue-50/60 px-4 py-3 text-xs leading-5 text-blue-700"><b>Loại workflow</b> mô tả mục đích và đưa ra cấu trúc gợi ý. <b>Module</b> xác định phạm vi nghiệp vụ, quyền truy cập và nơi kiểm tra trùng tên workflow.</div>
+            {workflowType === 'CUSTOM' && <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Loại Workflow khác <span className="text-red-500">*</span></label>
+              <input type="text" maxLength={255} required autoFocus placeholder="Nhập loại workflow"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-colors"
+                value={customWorkflowType} onChange={e => setCustomWorkflowType(e.target.value)} />
+            </div>}
+            {workflowType && (() => { const selected = workflowTypes.find(item => item.code === workflowType); return selected ? <div className="rounded-lg border border-orange-100 bg-orange-50/60 px-4 py-3 text-xs text-gray-600"><p className="font-semibold text-orange-700">Gợi ý cho {selected.name}</p>{selected.description && <p className="mt-1">{selected.description}</p>}{selected.checklist?.length > 0 && <p className="mt-1">Checklist: {selected.checklist.join(' • ')}</p>}</div> : null; })()}
 
             {/* Owner + Version */}
             <div className="grid grid-cols-2 gap-4">

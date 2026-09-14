@@ -7,6 +7,7 @@ import com.company.workflowbuilder.repository.WorkflowRepository;
 import com.company.workflowbuilder.repository.WorkflowStepRepository;
 import com.company.workflowbuilder.repository.WorkflowConnectionRepository;
 import com.company.workflowbuilder.repository.CustomFieldDefinitionRepository;
+import com.company.workflowbuilder.repository.FormFieldRepository;
 import com.company.workflowbuilder.entity.workflow.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -29,6 +30,13 @@ public class WorkflowValidationService {
     private final CustomFieldDefinitionRepository fieldRepository;
     private final WorkflowAuthorizationService authorization;
     private final ObjectMapper objectMapper;
+    private final FormFieldRepository formFields;
+
+    public WorkflowValidationService(WorkflowRepository workflowRepository, WorkflowStepRepository workflowStepRepository,
+            WorkflowConnectionRepository connectionRepository, CustomFieldDefinitionRepository fieldRepository,
+            WorkflowAuthorizationService authorization, ObjectMapper objectMapper) {
+        this(workflowRepository,workflowStepRepository,connectionRepository,fieldRepository,authorization,objectMapper,null);
+    }
 
     @Transactional(readOnly = true)
     public List<String> validate(UUID workflowId) {
@@ -38,6 +46,7 @@ public class WorkflowValidationService {
 
         List<WorkflowStep> steps = workflowStepRepository.findByWorkflowIdOrderByPositionXAsc(workflowId);
         List<String> errors = new ArrayList<>();
+        if(formFields!=null&&workflow.getFormVersion()==null) errors.add("Workflow phải gắn một Form đã publish.");
 
         // Rule 1: Exactly 1 START step
         long startCount = steps.stream().filter(s -> s.getType() == StepType.START).count();
@@ -77,7 +86,8 @@ public class WorkflowValidationService {
                 errors.add("Step '" + step.getLabel() + "' không có connection đi ra.");
         }
         Set<String> fieldKeys = new HashSet<>();
-        fieldRepository.findByStepWorkflowId(workflowId).forEach(field -> {
+        if(formFields!=null&&workflow.getFormVersion()!=null) formFields.findByFormVersionIdOrderByDisplayOrderAsc(workflow.getFormVersion().getId()).forEach(field->fieldKeys.add(field.getFieldKey()));
+        fieldRepository.findByStepWorkflowId(workflowId).stream().filter(field->field.getStep().getType()!=StepType.START).forEach(field -> {
             if (!fieldKeys.add(field.getFieldKey()))
                 errors.add("Field key bị trùng: " + field.getFieldKey());
         });
@@ -87,16 +97,19 @@ public class WorkflowValidationService {
             List<WorkflowConnection> elses = branches.stream().filter(c -> c.getType() == ConnectionType.ELSE).toList();
             if (elses.size() > 1)
                 errors.add("Mỗi step chỉ được có một nhánh ELSE.");
+            if (!ifs.isEmpty() && elses.isEmpty())
+                errors.add("Step có nhánh IF bắt buộc phải có một nhánh ELSE.");
             if (!ifs.isEmpty() && !elses.isEmpty() && ifs.stream()
                     .anyMatch(branch -> branch.getToStep().getId().equals(elses.get(0).getToStep().getId())))
                 errors.add("IF và ELSE phải nối tới hai node khác nhau.");
             if (!ifs.isEmpty() && branches.stream().anyMatch(c -> c.getType() == ConnectionType.DEFAULT))
-                errors.add("Step có IF không được đồng thời có DEFAULT; hãy dùng ELSE hoặc IF-only.");
+                errors.add("Step có IF không được đồng thời có DEFAULT; hãy dùng ELSE.");
             for (WorkflowConnection condition : ifs) {
                 if (condition.getClauses().isEmpty())
                     errors.add("Connection IF phải có condition.");
                 condition.getClauses().forEach(clause -> {
-                    if (!fieldKeys.contains(clause.getFieldKey()))
+                    if ((clause.getExpressionJson() == null || clause.getExpressionJson().isBlank())
+                            && !fieldKeys.contains(clause.getFieldKey()))
                         errors.add("Condition tham chiếu field không tồn tại: " + clause.getFieldKey());
                 });
             }
@@ -130,6 +143,20 @@ public class WorkflowValidationService {
             return;
         }
         if (step.getType() == StepType.SYSTEM_ACTION) {
+            boolean directSuccess = outgoing.stream().anyMatch(connection -> connection.getType() == ConnectionType.SYSTEM_SUCCESS);
+            boolean conditionalSuccess = outgoing.stream().anyMatch(connection -> connection.getType() == ConnectionType.IF);
+            boolean fallback = outgoing.stream().anyMatch(connection -> connection.getType() == ConnectionType.ELSE);
+            if (!directSuccess && !(conditionalSuccess && fallback))
+                errors.add("System Action Step '" + step.getLabel()
+                        + "' phải có nhánh Thành công hoặc đầy đủ nhánh IF/ELSE.");
+            if (directSuccess && (conditionalSuccess || fallback))
+                errors.add("System Action Step '" + step.getLabel()
+                        + "' không được dùng đồng thời nhánh Thành công và IF/ELSE.");
+        }
+        if (step.getType() == StepType.SYSTEM_ACTION
+                && outgoing.stream().noneMatch(connection -> connection.getType() == ConnectionType.SYSTEM_FAIL))
+            errors.add("System Action Step '" + step.getLabel() + "' phải có nhánh Thất bại.");
+        if (step.getType() == StepType.SYSTEM_ACTION) {
             if (Objects.toString(config.get("actionType"), "").isBlank())
                 errors.add("System Action Step '" + step.getLabel() + "' chưa được cấu hình.");
             return;
@@ -140,6 +167,12 @@ public class WorkflowValidationService {
                 errors.add("End Step '" + step.getLabel() + "' chưa được cấu hình kết quả.");
             return;
         }
+        if (step.getType() == StepType.ASSIGNMENT
+                && outgoing.stream().noneMatch(connection -> connection.getType() == ConnectionType.ASSIGNMENT_DONE))
+            errors.add("Assignment Step '" + step.getLabel() + "' phải có nhánh Hoàn thành.");
+        if (step.getType() == StepType.ASSIGNMENT
+                && outgoing.stream().noneMatch(connection -> connection.getType() == ConnectionType.ASSIGNMENT_FAIL))
+            errors.add("Assignment Step '" + step.getLabel() + "' phải có nhánh Thất bại.");
         if (step.getType() == StepType.ASSIGNMENT) {
             String target = Objects.toString(config.get("assignmentTargetType"), "");
             if ("USER".equals(target) && (!(config.get("actorUserIds") instanceof Collection<?> c) || c.isEmpty()))
@@ -203,7 +236,8 @@ public class WorkflowValidationService {
     }
 
     private boolean isHumanCorrectionBranch(WorkflowConnection connection) {
-        if (connection.getType() == ConnectionType.REVIEW_FAIL)
+        if (connection.getType() == ConnectionType.REVIEW_FAIL
+                || connection.getType() == ConnectionType.ASSIGNMENT_FAIL)
             return true;
         if (connection.getType() != ConnectionType.REJECT
                 || connection.getFromStep().getType() != StepType.APPROVAL)

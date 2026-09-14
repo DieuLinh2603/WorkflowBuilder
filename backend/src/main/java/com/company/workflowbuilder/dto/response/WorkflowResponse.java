@@ -18,7 +18,13 @@ public class WorkflowResponse {
     private String name;
     private String description;
     private String type;
+    private String typeName;
     private String module;
+    private String moduleName;
+    @Builder.Default
+    private List<String> recommendedStepTypes = List.of();
+    @Builder.Default
+    private List<String> typeChecklist = List.of();
     private UUID ownerId;
     private String ownerName;
     private String ownerAvatarInitials;
@@ -28,6 +34,10 @@ public class WorkflowResponse {
     private String status;
     private LocalDateTime createdAt;
     private UUID familyId;
+    private UUID formId;
+    private UUID formVersionId;
+    private Integer formVersionNumber;
+    private String formName;
     private boolean canEdit;
     private boolean canPublish;
     private boolean canManageEditors;

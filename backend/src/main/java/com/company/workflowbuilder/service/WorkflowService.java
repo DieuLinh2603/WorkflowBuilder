@@ -4,6 +4,7 @@ import com.company.workflowbuilder.dto.request.StepCreateRequest;
 import com.company.workflowbuilder.dto.request.StepUpdateRequest;
 import com.company.workflowbuilder.dto.request.StepLayoutUpdateRequest;
 import com.company.workflowbuilder.dto.request.WorkflowCreateRequest;
+import com.company.workflowbuilder.dto.request.WorkflowMetadataUpdateRequest;
 import com.company.workflowbuilder.dto.request.DuplicateWorkflowRequest;
 import com.company.workflowbuilder.dto.response.WorkflowResponse;
 import com.company.workflowbuilder.dto.response.WorkflowStepResponse;
@@ -36,7 +37,7 @@ import java.util.*;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
+@RequiredArgsConstructor(onConstructor_ = @org.springframework.beans.factory.annotation.Autowired)
 public class WorkflowService {
 
     private final WorkflowRepository workflowRepository;
@@ -52,6 +53,19 @@ public class WorkflowService {
     private final WorkflowViewMapper viewMapper;
     private final WorkflowDefinitionAnalysis definitionAnalysis;
     private final WorkflowQueryUseCase queries;
+    private final WorkflowMetadataService metadata;
+
+    /** Backward-compatible constructor used by focused unit tests. */
+    public WorkflowService(WorkflowRepository workflowRepository, WorkflowStepRepository workflowStepRepository,
+            UserRepository userRepository, WorkflowConnectionRepository connectionRepository,
+            CustomFieldDefinitionRepository fieldRepository, CurrentUserService currentUser,
+            WorkflowAuthorizationService authorization, WorkflowValidationService validationService,
+            WorkflowAudienceRepository audienceRepository, WorkflowInstanceRepository instanceRepository,
+            WorkflowViewMapper viewMapper, WorkflowDefinitionAnalysis definitionAnalysis, WorkflowQueryUseCase queries) {
+        this(workflowRepository, workflowStepRepository, userRepository, connectionRepository, fieldRepository,
+                currentUser, authorization, validationService, audienceRepository, instanceRepository, viewMapper,
+                definitionAnalysis, queries, null);
+    }
 
     /**
      * Create a new workflow with DRAFT status, version "1.0",
@@ -62,18 +76,31 @@ public class WorkflowService {
         if (!currentUser.hasRole(SystemRole.ADMIN) && !currentUser.hasRole(SystemRole.WORKFLOW_OWNER)) {
             throw new AccessDeniedException("Only admin or workflow owner can create workflows");
         }
+        String module = request.getModule().trim().toUpperCase(Locale.ROOT);
+        String type = request.getWorkflowType().trim().toUpperCase(Locale.ROOT);
+        metadata.requireActiveModule(module);
+        metadata.requireActiveType(type);
+        String customTypeName = request.getCustomWorkflowType() == null
+                ? null : request.getCustomWorkflowType().trim();
+        if ("CUSTOM".equals(type) && (customTypeName == null || customTypeName.isBlank()))
+            throw new IllegalArgumentException("Vui lòng nhập loại Workflow khác");
+        if (!"CUSTOM".equals(type)) customTypeName = null;
+        requireCurrentUserModule(module);
+        requireUniqueRootName(module, request.getName());
         final UUID ownerId = request.getOwnerId() != null && currentUser.hasRole(SystemRole.ADMIN)
                 ? request.getOwnerId()
                 : currentUser.id();
 
         User owner = userRepository.findById(ownerId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", ownerId));
+        requireUserModule(owner, module);
 
         Workflow workflow = Workflow.builder()
-                .name(request.getName())
+                .name(request.getName().trim())
                 .description(request.getDescription())
-                .type(request.getWorkflowType())
-                .module(request.getModule())
+                .type(type)
+                .customTypeName(customTypeName)
+                .module(module)
                 .owner(owner)
                 .version("1.0")
                 .status(WorkflowStatus.DRAFT)
@@ -99,6 +126,20 @@ public class WorkflowService {
     @Transactional(readOnly = true)
     public WorkflowResponse getWorkflowById(UUID id) {
         return queries.get(id);
+    }
+
+    @Transactional
+    public WorkflowResponse updateMetadata(UUID workflowId, WorkflowMetadataUpdateRequest request) {
+        Workflow workflow = findWorkflowOrThrow(workflowId);
+        authorization.requireEdit(workflow);
+        String name = request.getName().trim();
+        if (workflowRepository.existsByModuleAndVersionAndNameIgnoreCaseAndFamilyIdNot(
+                workflow.getModule(), "1.0", name, workflow.getFamilyId()))
+            throw new com.company.workflowbuilder.exception.DuplicateResourceException(
+                    "Tên workflow đã tồn tại trong module này");
+        workflow.setName(name);
+        workflow.setDescription(trimToNull(request.getDescription()));
+        return viewMapper.workflow(workflowRepository.save(workflow));
     }
 
     @Transactional(readOnly = true)
@@ -321,12 +362,14 @@ public class WorkflowService {
             if (replacement == null) {
                 WorkflowConnection newConnection = WorkflowConnection.builder()
                         .workflow(step.getWorkflow()).fromStep(replacementFrom).toStep(replacementTo)
-                        .type(incoming.getType()).logicalOperator(incoming.getLogicalOperator()).build();
+                        .type(incoming.getType()).logicalOperator(incoming.getLogicalOperator())
+                        .priority(incoming.getPriority()).build();
                 for (int index = 0; index < incoming.getClauses().size(); index++) {
                     WorkflowConditionClause clause = incoming.getClauses().get(index);
                     newConnection.getClauses().add(WorkflowConditionClause.builder()
                             .connection(newConnection).fieldKey(clause.getFieldKey())
                             .operator(clause.getOperator()).expectedValue(clause.getExpectedValue())
+                            .expressionJson(clause.getExpressionJson())
                             .displayOrder(index).build());
                 }
                 replacement = newConnection;
@@ -360,10 +403,19 @@ public class WorkflowService {
                 : currentUser.id();
         User owner = userRepository.findById(ownerId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", ownerId));
+        String targetModule = request.getModule() == null || request.getModule().isBlank()
+                ? source.getModule() : request.getModule().trim().toUpperCase(Locale.ROOT);
+        metadata.requireActiveModule(targetModule);
+        requireCurrentUserModule(targetModule);
+        requireUserModule(owner, targetModule);
+        if (!request.isWorkingCopy()) requireUniqueRootName(targetModule, request.getName());
         Workflow copy = workflowRepository
-                .save(Workflow.builder().name(request.getName()).description(source.getDescription())
-                        .type(source.getType()).module(source.getModule()).owner(owner).familyId(UUID.randomUUID())
-                        .sourceWorkflow(source).version("1.0").status(WorkflowStatus.DRAFT).build());
+                .save(Workflow.builder().name(request.getName().trim()).description(source.getDescription())
+                        .type(source.getType()).customTypeName(source.getCustomTypeName())
+                        .module(targetModule).owner(owner).familyId(UUID.randomUUID())
+                        .formVersion(source.getFormVersion())
+                        .sourceWorkflow(source).version(request.isWorkingCopy() ? "WORKING" : "1.0")
+                        .status(WorkflowStatus.DRAFT).build());
         Map<UUID, WorkflowStep> stepMap = new HashMap<>();
         for (WorkflowStep old : workflowStepRepository.findByWorkflowIdOrderByPositionXAsc(source.getId())) {
             WorkflowStep fresh = workflowStepRepository.save(WorkflowStep.builder().workflow(copy).type(old.getType())
@@ -374,6 +426,7 @@ public class WorkflowService {
                 fieldRepository.save(CustomFieldDefinition.builder().step(fresh).fieldKey(field.getFieldKey())
                         .label(field.getLabel())
                         .type(field.getType()).required(field.isRequired()).placeholder(field.getPlaceholder())
+                        .configurationJson(field.getConfigurationJson())
                         .displayOrder(field.getDisplayOrder()).build());
             }
         }
@@ -381,11 +434,12 @@ public class WorkflowService {
             WorkflowConnection fresh = WorkflowConnection.builder().workflow(copy)
                     .fromStep(stepMap.get(old.getFromStep().getId()))
                     .toStep(stepMap.get(old.getToStep().getId())).type(old.getType())
-                    .logicalOperator(old.getLogicalOperator()).build();
+                    .logicalOperator(old.getLogicalOperator()).priority(old.getPriority()).build();
             for (WorkflowConditionClause clause : old.getClauses())
                 fresh.getClauses().add(WorkflowConditionClause.builder()
                         .connection(fresh).fieldKey(clause.getFieldKey()).operator(clause.getOperator())
-                        .expectedValue(clause.getExpectedValue()).displayOrder(clause.getDisplayOrder()).build());
+                        .expectedValue(clause.getExpectedValue()).expressionJson(clause.getExpressionJson())
+                        .displayOrder(clause.getDisplayOrder()).build());
             connectionRepository.save(fresh);
         }
         return viewMapper.workflow(copy);
@@ -407,6 +461,8 @@ public class WorkflowService {
         request.setName(source.getName());
         request.setOwnerId(source.getOwner().getId());
         request.setSourceVersionId(source.getId());
+        request.setModule(source.getModule());
+        request.setWorkingCopy(true);
         WorkflowResponse duplicated = duplicate(source.getId(), request);
         Workflow draft = findWorkflowOrThrow(duplicated.getId());
         draft.setFamilyId(source.getFamilyId());
@@ -449,6 +505,7 @@ public class WorkflowService {
         authorization.requireOwnerOrAdmin(workflow);
         if (workflow.getStatus() != WorkflowStatus.DRAFT)
             throw new IllegalStateException("Only a draft can be published");
+        metadata.requireActiveModule(workflow.getModule());
         List<String> errors = validationService.validate(workflowId);
         if (!errors.isEmpty())
             throw new IllegalArgumentException(String.join("; ", errors));
@@ -471,6 +528,24 @@ public class WorkflowService {
         return viewMapper.workflow(workflowRepository.save(workflow));
     }
 
+    @Transactional(readOnly = true)
+    public List<com.company.workflowbuilder.dto.response.WorkflowEditorResponse> editorCandidates(UUID workflowId) {
+        Workflow workflow = findWorkflowOrThrow(workflowId);
+        authorization.requireOwnerOrAdmin(workflow);
+        requireDraftForEditorManagement(workflow);
+        return userRepository.findByActiveTrueAndManager_Id(workflow.getOwner().getId()).stream()
+                .filter(user -> user.getSystemRoles().contains(SystemRole.EDITOR)
+                        || user.getSystemRoles().contains(SystemRole.VIEWER))
+                .filter(user -> workflow.getModule() == null || workflow.getModule().isBlank()
+                        || user.getSystemRoles().contains(SystemRole.ADMIN)
+                        || user.getModuleCodes().contains(workflow.getModule()))
+                .filter(user -> !user.getId().equals(workflow.getOwner().getId()))
+                .filter(user -> workflow.getEditors().stream().noneMatch(editor -> editor.getId().equals(user.getId())))
+                .map(user -> com.company.workflowbuilder.dto.response.WorkflowEditorResponse.builder()
+                        .id(user.getId()).displayName(user.getDisplayName()).email(user.getEmail())
+                        .jobTitle(user.getJobTitle()).build()).toList();
+    }
+
     @Transactional
     public WorkflowResponse addEditor(UUID workflowId, UUID userId) {
         Workflow workflow = findWorkflowOrThrow(workflowId);
@@ -483,8 +558,11 @@ public class WorkflowService {
             throw new IllegalArgumentException("Only an EDITOR or VIEWER account can be assigned as workflow editor");
         if (!editor.isActive())
             throw new IllegalArgumentException("Inactive user cannot be assigned as workflow editor");
+        requireUserModule(editor, workflow.getModule());
         if (workflow.getOwner().getId().equals(editor.getId()))
             throw new IllegalArgumentException("Workflow owner does not need editor access");
+        if (editor.getManager() == null || !workflow.getOwner().getId().equals(editor.getManager().getId()))
+            throw new IllegalArgumentException("Chỉ được chọn Editor thuộc sự quản lý trực tiếp của Workflow Owner");
         workflow.getEditors().add(editor);
         return viewMapper.workflow(workflowRepository.save(workflow));
     }
@@ -513,6 +591,7 @@ public class WorkflowService {
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
         if (!owner.getSystemRoles().contains(SystemRole.WORKFLOW_OWNER))
             throw new IllegalArgumentException("New owner must have WORKFLOW_OWNER role");
+        requireUserModule(owner, workflow.getModule());
         workflow.setOwner(owner);
         return viewMapper.workflow(workflowRepository.save(workflow));
     }
@@ -522,6 +601,29 @@ public class WorkflowService {
     private Workflow findWorkflowOrThrow(UUID id) {
         return workflowRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Workflow", "id", id));
+    }
+
+    private void requireCurrentUserModule(String module) {
+        if (!currentUser.hasRole(SystemRole.ADMIN) && !currentUser.user().getModuleCodes().contains(module))
+            throw new AccessDeniedException("Bạn không thuộc module " + module);
+    }
+
+    private void requireUserModule(User user, String module) {
+        if (module == null || module.isBlank()) return;
+        if (!user.getSystemRoles().contains(SystemRole.ADMIN) && !user.getModuleCodes().contains(module))
+            throw new IllegalArgumentException("Người dùng không thuộc module " + module);
+    }
+
+    private void requireUniqueRootName(String module, String name) {
+        if (workflowRepository.existsByModuleAndVersionAndNameIgnoreCase(module, "1.0", name.trim()))
+            throw new com.company.workflowbuilder.exception.DuplicateResourceException(
+                    "Tên workflow đã tồn tại trong module này");
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private String getDefaultLabel(StepType type) {

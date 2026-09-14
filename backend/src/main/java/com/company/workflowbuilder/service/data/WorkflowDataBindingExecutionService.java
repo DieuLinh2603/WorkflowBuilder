@@ -128,9 +128,13 @@ public class WorkflowDataBindingExecutionService {
                 case TEXT -> String.valueOf(value);
                 case NUMBER -> value instanceof Number ? value : new BigDecimal(String.valueOf(value).trim());
                 case DATE -> LocalDate.parse(String.valueOf(value).trim()).toString();
+                case DATETIME -> java.time.LocalDateTime.parse(String.valueOf(value).trim()).toString();
                 case CHECKBOX -> booleanValue(value);
                 case FILE -> value;
-                default -> value;
+                case SELECT, RADIO, USER_PICKER -> String.valueOf(value);
+                case MULTI_CHOICE -> value instanceof Collection<?> ? value
+                        : java.util.Arrays.stream(String.valueOf(value).split("\\|"))
+                                .map(String::trim).filter(item -> !item.isBlank()).toList();
             };
         } catch (RuntimeException exception) {
             throw new IllegalArgumentException("Dòng dữ liệu " + row + ": không thể chuyển giá trị của field “"

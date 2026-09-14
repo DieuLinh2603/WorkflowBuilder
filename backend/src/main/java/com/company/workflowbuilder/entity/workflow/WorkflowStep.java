@@ -1,13 +1,10 @@
 package com.company.workflowbuilder.entity.workflow;
 
-import com.company.workflowbuilder.entity.form.FormVersion;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-import java.util.HashSet;
-import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -44,13 +41,4 @@ public class WorkflowStep {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "config_json", columnDefinition = "jsonb")
     private String configJson;
-
-    @ManyToMany
-    @JoinTable(
-        name = "step_forms",
-        joinColumns = @JoinColumn(name = "step_id"),
-        inverseJoinColumns = @JoinColumn(name = "form_version_id")
-    )
-    @Builder.Default
-    private Set<FormVersion> formVersions = new HashSet<>();
 }

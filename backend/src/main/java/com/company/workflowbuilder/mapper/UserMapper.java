@@ -1,33 +1,68 @@
 package com.company.workflowbuilder.mapper;
 
 import com.company.workflowbuilder.dto.response.UserResponse;
+import com.company.workflowbuilder.dto.response.UserDropdownResponse;
+import com.company.workflowbuilder.dto.response.UserListItemResponse;
 import com.company.workflowbuilder.entity.user.User;
-import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
-import org.mapstruct.Named;
+import org.springframework.stereotype.Component;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 
-@Mapper(componentModel = "spring")
-public interface UserMapper {
+@Component
+public class UserMapper {
 
-    @Mapping(target = "managerId", source = "manager.id")
-    @Mapping(target = "managerName", source = "manager.displayName")
-    UserResponse toResponse(User user);
+    public UserResponse toResponse(User user) {
+        if (user == null) return null;
+        return UserResponse.builder()
+                .id(user.getId())
+                .email(user.getEmail())
+                .displayName(user.getDisplayName())
+                .jobTitle(user.getJobTitle())
+                .managerId(user.getManager() == null ? null : user.getManager().getId())
+                .managerName(user.getManager() == null ? null : user.getManager().getDisplayName())
+                .dataSource(user.getDataSource())
+                .active(user.isActive())
+                .systemRoles(user.getSystemRoles() == null ? null : new LinkedHashSet<>(user.getSystemRoles()))
+                .moduleCodes(user.getModuleCodes() == null ? null : new LinkedHashSet<>(user.getModuleCodes()))
+                .createdAt(user.getCreatedAt())
+                .updatedAt(user.getUpdatedAt())
+                .build();
+    }
 
-    List<UserResponse> toResponseList(List<User> users);
+    public List<UserResponse> toResponseList(List<User> users) {
+        return users == null ? null : users.stream().map(this::toResponse).toList();
+    }
 
-    @Mapping(target = "managerName", source = "manager.displayName")
-    @Mapping(target = "avatarInitials", expression = "java(getInitials(user.getDisplayName()))")
-    @Mapping(target = "avatarColor", expression = "java(getColor(user.getDisplayName()))")
-    com.company.workflowbuilder.dto.response.UserListItemResponse toListItemResponse(User user);
+    public UserListItemResponse toListItemResponse(User user) {
+        if (user == null) return null;
+        return UserListItemResponse.builder()
+                .id(user.getId())
+                .avatarInitials(getInitials(user.getDisplayName()))
+                .avatarColor(getColor(user.getDisplayName()))
+                .displayName(user.getDisplayName())
+                .email(user.getEmail())
+                .jobTitle(user.getJobTitle())
+                .managerId(user.getManager() == null ? null : user.getManager().getId())
+                .managerName(user.getManager() == null ? null : user.getManager().getDisplayName())
+                .systemRoles(user.getSystemRoles() == null ? null : new LinkedHashSet<>(user.getSystemRoles()))
+                .moduleCodes(user.getModuleCodes() == null ? null : new LinkedHashSet<>(user.getModuleCodes()))
+                .createdAt(user.getCreatedAt())
+                .build();
+    }
 
-    @Mapping(target = "avatarInitials", expression = "java(getInitials(user.getDisplayName()))")
-    @Mapping(target = "avatarColor", expression = "java(getColor(user.getDisplayName()))")
-    com.company.workflowbuilder.dto.response.UserDropdownResponse toDropdownResponse(User user);
+    public UserDropdownResponse toDropdownResponse(User user) {
+        if (user == null) return null;
+        return UserDropdownResponse.builder()
+                .id(user.getId())
+                .displayName(user.getDisplayName())
+                .jobTitle(user.getJobTitle())
+                .avatarInitials(getInitials(user.getDisplayName()))
+                .avatarColor(getColor(user.getDisplayName()))
+                .build();
+    }
 
-    @Named("getInitials")
-    default String getInitials(String name) {
+    String getInitials(String name) {
         if (name == null || name.trim().isEmpty())
             return "NA";
         String[] parts = name.trim().split("\\s+");
@@ -37,8 +72,7 @@ public interface UserMapper {
         return (parts[0].substring(0, 1) + parts[parts.length - 1].substring(0, 1)).toUpperCase();
     }
 
-    @Named("getColor")
-    default String getColor(String name) {
+    String getColor(String name) {
         if (name == null || name.trim().isEmpty())
             return "bg-gray-500";
         String[] colors = {

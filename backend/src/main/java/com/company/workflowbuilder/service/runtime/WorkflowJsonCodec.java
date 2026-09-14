@@ -42,6 +42,20 @@ public class WorkflowJsonCodec {
         }
     }
 
+    public java.util.List<com.company.workflowbuilder.dto.CalculatedOutput> calculatedOutputs(Object value) {
+        if (value == null) return java.util.List.of();
+        return mapper.convertValue(value, new TypeReference<>() {});
+    }
+
+    public java.util.List<com.company.workflowbuilder.dto.ReviewResultItem> reviewResults(String json) {
+        if (json == null || json.isBlank()) return java.util.List.of();
+        try {
+            return mapper.readValue(json, new TypeReference<>() {});
+        } catch (Exception exception) {
+            throw new IllegalStateException("Invalid task review results", exception);
+        }
+    }
+
     public String render(String value, WorkflowInstance instance, Map<String, Object> snapshot) {
         String rendered = template(value, instance);
         for (Map.Entry<String, Object> entry : snapshot.entrySet()) {
