@@ -18,6 +18,10 @@ public class InstanceResponse {
     private UUID workflowId;
     private String workflowName;
     private String workflowVersion;
+    private UUID formId;
+    private UUID formVersionId;
+    private Integer formVersionNumber;
+    private String formName;
     private UUID createdById;
     private String createdByName;
     private UUID currentStepId;

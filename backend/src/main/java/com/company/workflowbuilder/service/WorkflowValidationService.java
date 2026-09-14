@@ -7,6 +7,7 @@ import com.company.workflowbuilder.repository.WorkflowRepository;
 import com.company.workflowbuilder.repository.WorkflowStepRepository;
 import com.company.workflowbuilder.repository.WorkflowConnectionRepository;
 import com.company.workflowbuilder.repository.CustomFieldDefinitionRepository;
+import com.company.workflowbuilder.repository.FormFieldRepository;
 import com.company.workflowbuilder.entity.workflow.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -29,6 +30,13 @@ public class WorkflowValidationService {
     private final CustomFieldDefinitionRepository fieldRepository;
     private final WorkflowAuthorizationService authorization;
     private final ObjectMapper objectMapper;
+    private final FormFieldRepository formFields;
+
+    public WorkflowValidationService(WorkflowRepository workflowRepository, WorkflowStepRepository workflowStepRepository,
+            WorkflowConnectionRepository connectionRepository, CustomFieldDefinitionRepository fieldRepository,
+            WorkflowAuthorizationService authorization, ObjectMapper objectMapper) {
+        this(workflowRepository,workflowStepRepository,connectionRepository,fieldRepository,authorization,objectMapper,null);
+    }
 
     @Transactional(readOnly = true)
     public List<String> validate(UUID workflowId) {
@@ -38,6 +46,7 @@ public class WorkflowValidationService {
 
         List<WorkflowStep> steps = workflowStepRepository.findByWorkflowIdOrderByPositionXAsc(workflowId);
         List<String> errors = new ArrayList<>();
+        if(formFields!=null&&workflow.getFormVersion()==null) errors.add("Workflow phải gắn một Form đã publish.");
 
         // Rule 1: Exactly 1 START step
         long startCount = steps.stream().filter(s -> s.getType() == StepType.START).count();
@@ -77,7 +86,8 @@ public class WorkflowValidationService {
                 errors.add("Step '" + step.getLabel() + "' không có connection đi ra.");
         }
         Set<String> fieldKeys = new HashSet<>();
-        fieldRepository.findByStepWorkflowId(workflowId).forEach(field -> {
+        if(formFields!=null&&workflow.getFormVersion()!=null) formFields.findByFormVersionIdOrderByDisplayOrderAsc(workflow.getFormVersion().getId()).forEach(field->fieldKeys.add(field.getFieldKey()));
+        fieldRepository.findByStepWorkflowId(workflowId).stream().filter(field->field.getStep().getType()!=StepType.START).forEach(field -> {
             if (!fieldKeys.add(field.getFieldKey()))
                 errors.add("Field key bị trùng: " + field.getFieldKey());
         });

@@ -24,6 +24,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.text.Normalizer;
@@ -50,6 +51,7 @@ public class StartStepService {
     private final WorkflowAudienceRepository audienceRepository;
     private final UserGroupRepository groupRepository;
     private final UserRepository userRepository;
+    @Autowired(required=false) private FormService formService;
 
     @Transactional(readOnly = true)
     public StartStepConfigResponse getStartConfig(UUID workflowId, UUID stepId) {
@@ -78,22 +80,21 @@ public class StartStepService {
                 .distinct()
                 .toList();
         
-        List<CustomFieldResponse> fields = customFieldRepository.findByStepIdOrderByDisplayOrderAsc(stepId)
-                .stream()
-                .map(this::toFieldResponse)
-                .toList();
+        List<CustomFieldResponse> fields = step.getWorkflow().getFormVersion()!=null&&formService!=null
+                ? formService.fieldResponses(step.getWorkflow().getFormVersion())
+                : customFieldRepository.findByStepIdOrderByDisplayOrderAsc(stepId).stream().map(this::toFieldResponse).toList();
+        var formVersion=step.getWorkflow().getFormVersion();
                 
         return StartStepConfigResponse.builder()
-                .instructionForCreator((String) config.get("instructionForCreator"))
+                .instructionForCreator(formVersion==null?(String)config.get("instructionForCreator"):formVersion.getInstruction())
                 .requesterScope(allEmployees ? "ALL_EMPLOYEES" : "SPECIFIC_GROUP_ROLE")
                 .allowedUserIds(allowedUserIds)
                 .allowedGroupIds(allowedGroupIds)
                 .allowedRoles(allowedRoles)
                 .allowRequesterWithdrawal(!Boolean.FALSE.equals(config.get("allowRequesterWithdrawal")))
-                .submissionMode("BATCH".equals(config.get("submissionMode")) ? "BATCH" : "SINGLE")
-                .recordRecipientFieldKey((String) config.get("recordRecipientFieldKey"))
-                .maxBatchRows(config.get("maxBatchRows") instanceof Number number
-                        ? number.intValue() : 500)
+                .submissionMode(formVersion==null?("BATCH".equals(config.get("submissionMode"))?"BATCH":"SINGLE"):formVersion.getSubmissionMode())
+                .recordRecipientFieldKey(formVersion==null?(String)config.get("recordRecipientFieldKey"):formVersion.getRecordRecipientFieldKey())
+                .maxBatchRows(formVersion==null?(config.get("maxBatchRows") instanceof Number number?number.intValue():500):formVersion.getMaxBatchRows())
                 .fields(fields)
                 .build();
     }

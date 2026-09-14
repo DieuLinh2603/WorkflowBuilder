@@ -413,6 +413,7 @@ public class WorkflowService {
                 .save(Workflow.builder().name(request.getName().trim()).description(source.getDescription())
                         .type(source.getType()).customTypeName(source.getCustomTypeName())
                         .module(targetModule).owner(owner).familyId(UUID.randomUUID())
+                        .formVersion(source.getFormVersion())
                         .sourceWorkflow(source).version(request.isWorkingCopy() ? "WORKING" : "1.0")
                         .status(WorkflowStatus.DRAFT).build());
         Map<UUID, WorkflowStep> stepMap = new HashMap<>();

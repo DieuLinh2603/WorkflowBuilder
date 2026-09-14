@@ -70,6 +70,16 @@ class FlywayMigrationTest {
                 Statement statement = connection.createStatement();
                 ResultSet columns = statement.executeQuery("""
                         SELECT data_type FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = 'workflow_tasks'
+                          AND column_name = 'review_handoff'
+                        """)) {
+            assertThat(columns.next()).isTrue();
+            assertThat(columns.getString(1)).isEqualTo("jsonb");
+        }
+        try (Connection connection = POSTGRES.createConnection("");
+                Statement statement = connection.createStatement();
+                ResultSet columns = statement.executeQuery("""
+                        SELECT data_type FROM information_schema.columns
                         WHERE table_schema = 'public' AND table_name = 'system_action_executions'
                           AND column_name = 'response_selector_json'
                         """)) {

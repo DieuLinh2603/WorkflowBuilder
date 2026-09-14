@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { Share2, LayoutDashboard, GitBranch, Layers, Users, Settings, LogOut, ChevronDown, FilePlus2, ClipboardCheck, KeyRound, DatabaseZap, Plug } from 'lucide-react';
+import { Share2, LayoutDashboard, GitBranch, Layers, Users, Settings, LogOut, ChevronDown, FilePlus2, ClipboardCheck, KeyRound, DatabaseZap, Plug, FileText } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import NotificationCenter from '../components/NotificationCenter';
@@ -37,9 +37,10 @@ export default function MainLayout() {
       return [
         ...base,
         { path: '/workflows', label: 'Workflows', icon: GitBranch },
+        { path: '/forms', label: 'Forms', icon: FileText },
         { path: '/pipelines', label: 'Data Pipelines', icon: DatabaseZap },
         { path: '/connectors', label: 'Connectors', icon: Plug },
-        { path: '/instances', label: 'Instances', icon: Layers },
+        { path: '/tickets', label: 'Tickets', icon: Layers },
         { path: '/users', label: 'Users', icon: Users },
       ];
     }
@@ -49,7 +50,7 @@ export default function MainLayout() {
         ...base,
         { path: '/workflows', label: 'Workflows', icon: GitBranch },
         { path: '/pipelines', label: 'Data Pipelines', icon: DatabaseZap },
-        { path: '/instances', label: 'Instances', icon: Layers },
+        { path: '/tickets', label: 'Tickets', icon: Layers },
       ];
     }
 
@@ -57,7 +58,7 @@ export default function MainLayout() {
       return [
         ...base,
         { path: '/workflows', label: 'Workflows', icon: GitBranch },
-        { path: '/instances', label: 'Instances', icon: Layers },
+        { path: '/tickets', label: 'Tickets', icon: Layers },
       ];
     }
 
@@ -65,7 +66,7 @@ export default function MainLayout() {
     return [
       ...base,
       { path: '/workflows', label: 'Workflows được giao', icon: GitBranch },
-      { path: '/instances', label: 'Instances', icon: Layers },
+      { path: '/tickets', label: 'Tickets', icon: Layers },
     ];
   };
 

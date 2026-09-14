@@ -2,6 +2,7 @@ package com.company.workflowbuilder.entity.runtime;
 
 import com.company.workflowbuilder.entity.user.User;
 import com.company.workflowbuilder.entity.workflow.*;
+import com.company.workflowbuilder.entity.form.FormVersion;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -23,6 +24,11 @@ public class WorkflowInstance {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "workflow_id", nullable = false)
     private Workflow workflow;
+
+    /** Form definition frozen when this ticket was submitted. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "form_version_id", nullable = false)
+    private FormVersion formVersion;
 
     @Column(name = "request_code", nullable = false, unique = true)
     private String requestCode;

@@ -2,6 +2,7 @@ package com.company.workflowbuilder.entity.runtime;
 
 import com.company.workflowbuilder.entity.user.User;
 import com.company.workflowbuilder.entity.workflow.Workflow;
+import com.company.workflowbuilder.entity.form.FormVersion;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -32,6 +33,10 @@ public class RequestDraft {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "workflow_version_id", nullable = false)
     private Workflow workflowVersion;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "form_version_id", nullable = false)
+    private FormVersion formVersion;
 
     @Column(name = "field_snapshot", nullable = false, columnDefinition = "TEXT")
     @Builder.Default

@@ -1,4 +1,4 @@
 -------------------------------------------------------------------------------
 Test set: com.company.workflowbuilder.migration.FlywayMigrationTest
 -------------------------------------------------------------------------------
-Tests run: 1, Failures: 0, Errors: 0, Skipped: 1, Time elapsed: 0.032 s -- in com.company.workflowbuilder.migration.FlywayMigrationTest
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 1, Time elapsed: 0.028 s -- in com.company.workflowbuilder.migration.FlywayMigrationTest

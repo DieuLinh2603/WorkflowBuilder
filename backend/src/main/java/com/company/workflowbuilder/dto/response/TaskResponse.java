@@ -20,6 +20,7 @@ public class TaskResponse {
     private String status;
     private Map<String, Object> fields;
     private List<com.company.workflowbuilder.dto.ReviewResultItem> reviewResults;
+    private List<Map<String, Object>> reviewHandoffs;
     private List<com.company.workflowbuilder.dto.CalculatedOutput> calculatedOutputs;
     private List<Map<String, Object>> calculatedRows;
     private List<CustomFieldResponse> fieldDefinitions;

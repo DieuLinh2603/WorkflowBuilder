@@ -18,5 +18,7 @@ public interface WorkflowTaskRepository extends JpaRepository<WorkflowTask, UUID
 
     List<WorkflowTask> findByInstanceIdAndStatus(UUID instanceId, TaskStatus status);
 
+    List<WorkflowTask> findByInstanceIdAndStatusOrderByCompletedAtAsc(UUID instanceId, TaskStatus status);
+
     List<WorkflowTask> findByInstanceIdAndStepIdAndActivationId(UUID instanceId, UUID stepId, UUID activationId);
 }

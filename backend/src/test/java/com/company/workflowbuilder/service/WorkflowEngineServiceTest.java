@@ -77,6 +77,7 @@ class WorkflowEngineServiceTest {
         lenient().when(normalizedBatchRecords.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(batchRecordAccess.findAccessibleRecordIds(any(), any())).thenReturn(Set.of());
         lenient().when(currentUser.user()).thenAnswer(invocation -> authenticated.get());
+        lenient().when(currentUser.id()).thenAnswer(invocation -> authenticated.get() == null ? null : authenticated.get().getId());
         lenient().when(instances.save(any())).thenAnswer(invocation -> {
             WorkflowInstance value = invocation.getArgument(0);
             if (value.getId() == null) value.setId(UUID.randomUUID());
@@ -93,6 +94,10 @@ class WorkflowEngineServiceTest {
         });
         lenient().when(tasks.findByInstanceIdAndStatus(any(), any())).thenAnswer(invocation -> taskStore.stream()
                 .filter(task -> task.getInstance().getId().equals(invocation.getArgument(0)) && task.getStatus() == invocation.getArgument(1)).toList());
+        lenient().when(tasks.findByInstanceIdAndStatusOrderByCompletedAtAsc(any(), any())).thenAnswer(invocation -> taskStore.stream()
+                .filter(task -> task.getInstance().getId().equals(invocation.getArgument(0)) && task.getStatus() == invocation.getArgument(1))
+                .sorted(Comparator.comparing(WorkflowTask::getCompletedAt, Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList());
         lenient().when(tasks.findByInstanceIdAndStepIdAndActivationId(any(), any(), any())).thenAnswer(invocation -> taskStore.stream()
                 .filter(task -> task.getInstance().getId().equals(invocation.getArgument(0))
                         && task.getStep().getId().equals(invocation.getArgument(1))
@@ -125,7 +130,8 @@ class WorkflowEngineServiceTest {
                 "actionType", "UPDATE_DATA", "failurePolicy", "STOP",
                 "mappings", List.of(Map.of("targetField", "processed", "valueTemplate", "yes")))));
         WorkflowStep review = step(workflow, StepType.REVIEW, "Review", actorConfig(actor, Map.of(
-                "mode", "MANUAL", "commentRequired", true, "resultMode", "REQUIRE_APPROVAL")));
+                "mode", "MANUAL", "commentRequired", true, "resultMode", "REQUIRE_APPROVAL",
+                "forwardReviewHandoff", true)));
         WorkflowStep assignment = step(workflow, StepType.ASSIGNMENT, "Assignment", actorConfig(actor, Map.of("completionMode", "ANY")));
         WorkflowStep end = step(workflow, StepType.END, "End", mapper.writeValueAsString(Map.of("outcome", "COMPLETED", "notifyRequester", true)));
 
@@ -162,6 +168,15 @@ class WorkflowEngineServiceTest {
         assertThat(reviewed.getFields()).containsEntry("score", 36);
         assertThat(taskStore.stream().filter(task -> task.getStep().getType() == StepType.REVIEW).findFirst().orElseThrow().getReviewResults()).contains("Đã đối chiếu");
         assertThat(logStore).anyMatch(log -> log.getComment() != null && log.getComment().contains("Kết luận: Đã đối chiếu"));
+        var assignmentTask = taskStore.stream().filter(task -> task.getStep().getType() == StepType.ASSIGNMENT)
+                .findFirst().orElseThrow();
+        var handoffs = engine.myTask(assignmentTask.getId()).getReviewHandoffs();
+        assertThat(handoffs).singleElement().satisfies(handoff -> {
+            assertThat(handoff).containsEntry("sourceStepLabel", "Review").containsEntry("reviewerName", actor.getDisplayName());
+            assertThat(handoff.get("comment")).isEqualTo("ok");
+            assertThat(handoff.get("additionalResults").toString()).contains("Đã đối chiếu");
+            assertThat(handoff.get("records").toString()).contains("PASS").contains("score=36");
+        });
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> engine.act(instanceId,"COMPLETE",actionRequest));
         actionRequest.setReviewResults(List.of());
         actionRequest.setCalculatedOutputs(List.of());

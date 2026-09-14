@@ -203,6 +203,7 @@ export default function TaskDetailPage() {
                 ))}
               </div>}
             </section>
+            {!!task.reviewHandoffs?.length && <ReviewHandoffSection handoffs={task.reviewHandoffs} />}
             {!!task.fieldDefinitions?.length && <section className="rounded-2xl border border-orange-200 bg-white p-6 shadow-sm"><h2 className="mb-2 font-bold text-slate-800">{review ? 'Kết quả tổng hợp' : 'Kết quả thực hiện'}</h2><p className="mb-5 text-xs text-slate-500">Các dữ liệu đầu ra này sẽ được chuyển cho những bước tiếp theo.{task.batch && ' Giá trị nhập tại đây được áp dụng cho tất cả hồ sơ trong task hiện tại.'}</p><div className="grid grid-cols-2 gap-5">{task.fieldDefinitions.map(field=><TaskFieldInput key={field.id} field={field} users={users} value={fields[field.fieldKey]} disabled={!task.fieldsEditable} onChange={value=>setFields(current=>({...current,[field.fieldKey]:value}))}/>)}</div></section>}
             {review && <section className="rounded-2xl border border-orange-200 bg-white p-6 shadow-sm">
               <CalculatedOutputEditor value={calculatedOutputs} onChange={setCalculatedOutputs} fields={task.batch ? [...new Set((task.batchRecords || []).flatMap(record => Object.keys(record.fields || {})))] : Object.keys(fields)} disabled={task.status !== 'PENDING' || submitting || previewing}/>
@@ -352,6 +353,36 @@ function TaskFieldInput({field,value,onChange,users,disabled}) {
   else if(field.type==='USER_PICKER') input=<select multiple={field.allowMultiple} value={field.allowMultiple?(value||[]):(value??'')} onChange={e=>onChange(field.allowMultiple?[...e.target.selectedOptions].map(o=>o.value):e.target.value)} disabled={disabled} className={style}><option value="">Chọn người dùng...</option>{users.map(u=><option key={u.id} value={u.id}>{u.displayName} · {u.email}</option>)}</select>;
   else input=<input value={value??''} onChange={e=>onChange(e.target.value)} disabled={disabled} className={style}/>;
   return <label className={field.type==='MULTI_CHOICE'||field.type==='RADIO'?'col-span-2':''}>{label}{input}</label>;
+}
+
+function ReviewHandoffSection({ handoffs }) {
+  return <section className="rounded-2xl border border-violet-200 bg-white p-6 shadow-sm">
+    <div className="mb-4">
+      <h2 className="font-bold text-slate-800">Báo cáo bàn giao từ bước Review</h2>
+      <p className="mt-1 text-xs text-slate-500">Dữ liệu, kết quả phân loại và ghi chú được Reviewer chuyển cho bước hiện tại.</p>
+    </div>
+    <div className="space-y-4">{handoffs.map((handoff, index) => {
+      const passCount = (handoff.records || []).filter(record => record.outcome === 'PASS').length;
+      const failCount = (handoff.records || []).filter(record => record.outcome === 'FAIL').length;
+      return <article key={handoff.sourceTaskId || index} className="overflow-hidden rounded-xl border border-violet-100">
+        <div className="flex flex-wrap items-start justify-between gap-3 bg-violet-50 px-4 py-3">
+          <div><p className="text-sm font-semibold text-violet-900">{handoff.sourceStepLabel || 'Review'}</p><p className="mt-0.5 text-[11px] text-violet-600">{handoff.reviewerName || 'Reviewer'}{handoff.reviewedAt ? ` · ${new Date(handoff.reviewedAt).toLocaleString('vi-VN')}` : ''}</p></div>
+          <div className="flex gap-2">{passCount > 0 && <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-700">PASS: {passCount}</span>}{failCount > 0 && <span className="rounded-full bg-red-100 px-2.5 py-1 text-[10px] font-bold text-red-700">FAIL: {failCount}</span>}</div>
+        </div>
+        <div className="space-y-4 p-4">
+          {handoff.comment && <div><p className="mb-1 text-[11px] font-bold uppercase text-slate-500">Nhận xét</p><p className="whitespace-pre-wrap break-words rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">{handoff.comment}</p></div>}
+          {!!handoff.additionalResults?.length && <div><p className="mb-2 text-[11px] font-bold uppercase text-slate-500">Nội dung tổng hợp</p><dl className="grid gap-2 sm:grid-cols-2">{handoff.additionalResults.map((item, itemIndex) => <div key={`${item.label}-${itemIndex}`} className="rounded-lg border border-slate-100 px-3 py-2"><dt className="text-xs font-semibold text-slate-600">{item.label}</dt><dd className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-800">{item.content}</dd></div>)}</dl></div>}
+          {!!handoff.records?.length && <HandoffRecordsTable records={handoff.records} />}
+        </div>
+      </article>;
+    })}</div>
+  </section>;
+}
+
+function HandoffRecordsTable({ records }) {
+  const keys = [...new Set(records.flatMap(record => Object.keys(record.fields || {})))];
+  const showRowNumber = records.some(record => record.rowNumber != null);
+  return <div><p className="mb-2 text-[11px] font-bold uppercase text-slate-500">Dữ liệu đã review</p><div className="overflow-x-auto rounded-lg border border-slate-200"><table className="min-w-full text-left text-xs"><thead className="bg-slate-50 text-slate-600"><tr>{showRowNumber && <th className="whitespace-nowrap px-3 py-2">Dòng</th>}<th className="whitespace-nowrap px-3 py-2">Kết quả</th>{keys.map(key => <th key={key} className="whitespace-nowrap px-3 py-2">{key.replaceAll('_', ' ')}</th>)}</tr></thead><tbody>{records.map((record, index) => <tr key={`${record.rowNumber ?? 'record'}-${index}`} className="border-t border-slate-100">{showRowNumber && <td className="px-3 py-2 font-semibold text-violet-600">{record.rowNumber ?? '—'}</td>}<td className="px-3 py-2"><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${record.outcome === 'PASS' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>{record.outcome || '—'}</span></td>{keys.map(key => <td key={key} className="max-w-[260px] px-3 py-2 text-slate-700">{displayValue(record.fields?.[key])}</td>)}</tr>)}</tbody></table></div></div>;
 }
 
 function BatchRecordsTable({ records, historical, selectable = false, selectedRows = [], onSelectedRowsChange, selectedOutcome = 'PASS', onSelectedOutcomeChange }) {

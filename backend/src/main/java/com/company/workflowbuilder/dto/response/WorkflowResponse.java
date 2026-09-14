@@ -34,6 +34,10 @@ public class WorkflowResponse {
     private String status;
     private LocalDateTime createdAt;
     private UUID familyId;
+    private UUID formId;
+    private UUID formVersionId;
+    private Integer formVersionNumber;
+    private String formName;
     private boolean canEdit;
     private boolean canPublish;
     private boolean canManageEditors;
