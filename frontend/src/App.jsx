@@ -7,6 +7,7 @@ import DashboardPage from './pages/DashboardPage';
 import UsersPage from './pages/UsersPage';
 import InstancesPage from './pages/InstancesPage';
 import WorkflowsPage from './pages/WorkflowsPage';
+import FormsPage from './pages/FormsPage';
 import WorkflowDesignerPage from './pages/WorkflowDesignerPage';
 import WorkflowVersionHistoryPage from './pages/WorkflowVersionHistoryPage';
 import CatalogPage from './pages/CatalogPage';
@@ -61,6 +62,14 @@ function App() {
         <Route path="connectors" element={<ProtectedRoute allowedRoles={['ADMIN']}><ConnectorsPage /></ProtectedRoute>} />
         <Route path="pipelines" element={<ProtectedRoute allowedRoles={['ADMIN','WORKFLOW_OWNER']}><PipelinesPage /></ProtectedRoute>} />
         <Route path="pipelines/:id" element={<ProtectedRoute allowedRoles={['ADMIN','WORKFLOW_OWNER']}><PipelineDesignerPage /></ProtectedRoute>} />
+        <Route
+          path="forms"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'WORKFLOW_OWNER', 'EDITOR', 'VIEWER']}>
+              <FormsPage />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="workflows"
           element={
