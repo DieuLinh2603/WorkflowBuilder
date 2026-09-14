@@ -181,6 +181,7 @@ public class WorkflowConnectionService {
                     ConditionOperator.IS_EMPTY, ConditionOperator.NOT_EMPTY, ConditionOperator.IS_NULL,
                     ConditionOperator.NOT_NULL, ConditionOperator.IS_TRUE, ConditionOperator.IS_FALSE);
             case FILE -> EnumSet.of(ConditionOperator.IS_EMPTY, ConditionOperator.NOT_EMPTY);
+            default -> EnumSet.of(ConditionOperator.EQ, ConditionOperator.NEQ, ConditionOperator.IS_EMPTY, ConditionOperator.NOT_EMPTY);
         };
     }
 

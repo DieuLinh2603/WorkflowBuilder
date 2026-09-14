@@ -62,6 +62,7 @@ public class WorkflowFieldValidationService {
             case FILE -> value instanceof Map<?, ?> file
                     && file.get("name") instanceof String name && !name.isBlank()
                     && file.get("dataUrl") instanceof String;
+            default -> true;
         };
         if (!valid)
             throw new IllegalArgumentException(errorPrefix + field.getLabel());

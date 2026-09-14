@@ -248,6 +248,7 @@ public class StepConfigService {
             case CHECKBOX -> EnumSet.of(ConditionOperator.EQ, ConditionOperator.NEQ,
                     ConditionOperator.IS_EMPTY, ConditionOperator.NOT_EMPTY);
             case FILE -> EnumSet.of(ConditionOperator.IS_EMPTY, ConditionOperator.NOT_EMPTY);
+            default -> EnumSet.of(ConditionOperator.EQ, ConditionOperator.NEQ, ConditionOperator.IS_EMPTY, ConditionOperator.NOT_EMPTY);
         };
     }
     private void requireDraft(WorkflowStep step) {

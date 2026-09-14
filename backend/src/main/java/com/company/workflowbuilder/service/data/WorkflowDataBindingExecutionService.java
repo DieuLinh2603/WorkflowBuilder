@@ -130,6 +130,7 @@ public class WorkflowDataBindingExecutionService {
                 case DATE -> LocalDate.parse(String.valueOf(value).trim()).toString();
                 case CHECKBOX -> booleanValue(value);
                 case FILE -> value;
+                default -> value;
             };
         } catch (RuntimeException exception) {
             throw new IllegalArgumentException("Dòng dữ liệu " + row + ": không thể chuyển giá trị của field “"
