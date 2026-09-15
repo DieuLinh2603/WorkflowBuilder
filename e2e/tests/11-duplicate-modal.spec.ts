@@ -3,8 +3,10 @@ import { test, expect } from '../fixtures/workflow.fixture.js';
 test.describe('Scenario Group 11: Duplicate Workflow Modal', () => {
 
   test.beforeEach(async ({ page }) => {
-    await page.evaluate(() => {
-      localStorage.removeItem('wf_banner_duplicate_scope');
+    await page.addInitScript(() => {
+      try {
+        localStorage.removeItem('wf_banner_duplicate_scope');
+      } catch (_) {}
     });
   });
 

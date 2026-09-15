@@ -40,9 +40,12 @@ test.describe('Scenario Group 3: Review Step Configuration', () => {
     }
 
     // Select REQUIRE_APPROVAL
-    const reqApprovalRadio = designerPage.locator('input[type="radio"]').filter({ hasText: /Yêu cầu review đạt/i });
-    if (await reqApprovalRadio.isVisible()) {
-      await reqApprovalRadio.check();
+    const reqApprovalOption = designerPage.locator('input[type="radio"][value="REQUIRE_APPROVAL"], label:has-text("Yêu cầu review đạt") input[type="radio"]').first();
+    const reqApprovalLabel = designerPage.locator('label').filter({ hasText: /Yêu cầu review đạt/i }).first();
+    if (await reqApprovalOption.isVisible()) {
+      await reqApprovalOption.check();
+    } else if (await reqApprovalLabel.isVisible()) {
+      await reqApprovalLabel.click();
     }
 
     await savePanel(designerPage);
