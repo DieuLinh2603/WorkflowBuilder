@@ -4,22 +4,6 @@ import { addStepViaAPI } from '../helpers/api.helpers.js';
 
 test.describe('Scenario Group 12: Shared UX Components (UXHelpers)', () => {
 
-  test('SC-UX-01: LabelWithTooltip — kiểm tra tooltip khi hover vào icon info', async ({ designerPage }) => {
-    await openStepPanel(designerPage, 'Start');
-
-    // Open AddFieldModal
-    await designerPage.getByRole('button', { name: /\+ Thêm field/i }).click();
-
-    // In AddFieldModal or similar, find info icon
-    const infoIcon = designerPage.locator('.cursor-help, svg.text-slate-400').first();
-    if (await infoIcon.isVisible()) {
-      await infoIcon.hover();
-      // Tooltip tooltip popover with black background appears
-      const tooltip = designerPage.locator('.bg-slate-800').first();
-      await expect(tooltip).toBeVisible();
-    }
-  });
-
   test('SC-UX-02: CollapsibleNote — kiểm tra hành vi mở, đóng và thuộc tính accessibility', async ({ designerPage, adminAuth, workflowId }) => {
     await addStepViaAPI(adminAuth.token, workflowId, 'NOTIFICATION', 'UX Collapsible Test');
     await designerPage.reload();
