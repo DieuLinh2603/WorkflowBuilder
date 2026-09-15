@@ -1,11 +1,13 @@
 package com.company.workflowbuilder.entity.runtime;
 
+import com.company.workflowbuilder.entity.form.FormVersion;
 import com.company.workflowbuilder.entity.user.User;
 import com.company.workflowbuilder.entity.workflow.*;
-import com.company.workflowbuilder.entity.form.FormVersion;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.*;
 import java.util.UUID;
 
@@ -52,7 +54,8 @@ public class WorkflowInstance {
     @Builder.Default
     private InstanceStatus status = InstanceStatus.RUNNING;
 
-    @Column(name = "field_snapshot", columnDefinition = "TEXT", nullable = false)
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "field_snapshot", columnDefinition = "jsonb", nullable = false)
     @Builder.Default
     private String fieldSnapshot = "{}";
 

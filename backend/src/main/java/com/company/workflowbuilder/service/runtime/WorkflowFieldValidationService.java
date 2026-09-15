@@ -26,13 +26,22 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor(onConstructor_ = @org.springframework.beans.factory.annotation.Autowired)
 public class WorkflowFieldValidationService {
     private final CustomFieldDefinitionRepository fields;
     private final UserRepository users;
     private final ObjectMapper objectMapper;
     private final FormFieldRepository formFields;
     private final WorkflowStepRepository steps;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public WorkflowFieldValidationService(CustomFieldDefinitionRepository fields, UserRepository users,
+            ObjectMapper objectMapper, FormFieldRepository formFields, WorkflowStepRepository steps) {
+        this.fields = fields;
+        this.users = users;
+        this.objectMapper = objectMapper;
+        this.formFields = formFields;
+        this.steps = steps;
+    }
 
     /** Backwards-compatible constructor used by focused unit tests. */
     public WorkflowFieldValidationService(CustomFieldDefinitionRepository fields) {
@@ -129,6 +138,7 @@ public class WorkflowFieldValidationService {
             case FILE -> value instanceof Map<?, ?> file
                     && file.get("name") instanceof String name && !name.isBlank()
                     && file.get("dataUrl") instanceof String;
+            default -> true;
         };
         if (!valid)
             throw new IllegalArgumentException(errorPrefix + field.getLabel());

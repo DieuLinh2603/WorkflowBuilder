@@ -1,7 +1,7 @@
 package com.company.workflowbuilder.entity.workflow;
 
-import com.company.workflowbuilder.entity.user.User;
 import com.company.workflowbuilder.entity.form.FormVersion;
+import com.company.workflowbuilder.entity.user.User;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -9,8 +9,8 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -52,6 +52,10 @@ public class Workflow {
     @JoinColumn(name = "owner_id", nullable = false)
     private User owner;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "form_version_id")
+    private FormVersion formVersion;
+
     @Column(nullable = false)
     @Builder.Default
     private String version = "1.0";
@@ -69,15 +73,12 @@ public class Workflow {
     @JoinColumn(name = "source_workflow_id")
     private Workflow sourceWorkflow;
 
-    /** Immutable form schema used by this exact workflow version. */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "form_version_id")
-    private FormVersion formVersion;
-
     @ManyToMany
-    @JoinTable(name = "workflow_editors",
-            joinColumns = @JoinColumn(name = "workflow_id"),
-            inverseJoinColumns = @JoinColumn(name = "user_id"))
+    @JoinTable(
+        name = "workflow_editors",
+        joinColumns = @JoinColumn(name = "workflow_id"),
+        inverseJoinColumns = @JoinColumn(name = "user_id")
+    )
     @Builder.Default
     private Set<User> editors = new HashSet<>();
 
@@ -99,6 +100,8 @@ public class Workflow {
 
     @PrePersist
     void initializeFamilyId() {
-        if (familyId == null) familyId = id == null ? UUID.randomUUID() : id;
+        if (this.familyId == null) {
+            this.familyId = (this.id != null) ? this.id : UUID.randomUUID();
+        }
     }
 }

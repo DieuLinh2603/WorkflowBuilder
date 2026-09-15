@@ -21,7 +21,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * Returns a list of human-readable error strings (empty = valid).
  */
 @Service
-@RequiredArgsConstructor
 public class WorkflowValidationService {
 
     private final WorkflowRepository workflowRepository;
@@ -31,6 +30,19 @@ public class WorkflowValidationService {
     private final WorkflowAuthorizationService authorization;
     private final ObjectMapper objectMapper;
     private final FormFieldRepository formFields;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public WorkflowValidationService(WorkflowRepository workflowRepository, WorkflowStepRepository workflowStepRepository,
+            WorkflowConnectionRepository connectionRepository, CustomFieldDefinitionRepository fieldRepository,
+            WorkflowAuthorizationService authorization, ObjectMapper objectMapper, FormFieldRepository formFields) {
+        this.workflowRepository = workflowRepository;
+        this.workflowStepRepository = workflowStepRepository;
+        this.connectionRepository = connectionRepository;
+        this.fieldRepository = fieldRepository;
+        this.authorization = authorization;
+        this.objectMapper = objectMapper;
+        this.formFields = formFields;
+    }
 
     public WorkflowValidationService(WorkflowRepository workflowRepository, WorkflowStepRepository workflowStepRepository,
             WorkflowConnectionRepository connectionRepository, CustomFieldDefinitionRepository fieldRepository,

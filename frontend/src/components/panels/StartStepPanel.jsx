@@ -118,7 +118,7 @@ export default function StartStepPanel({ workflowId, step, onClose }) {
           </div>
           <div>
             <h2 className="font-bold text-gray-800 text-sm">Cấu hình: Start Step</h2>
-            <p className="text-[10px] text-gray-500 mt-1">Điểm bắt đầu và thu thập thông tin ban đầu của workflow</p>
+            <span className="mt-1 inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">Bắt đầu &amp; Thu thập dữ liệu</span>
           </div>
         </div>
         <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors shrink-0">

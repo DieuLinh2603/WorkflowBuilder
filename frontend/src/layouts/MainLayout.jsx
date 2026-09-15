@@ -48,6 +48,7 @@ export default function MainLayout() {
     if (hasRole('WORKFLOW_OWNER')) {
       return [
         ...base,
+        { path: '/forms', label: 'Forms', icon: FileText },
         { path: '/workflows', label: 'Workflows', icon: GitBranch },
         { path: '/pipelines', label: 'Data Pipelines', icon: DatabaseZap },
         { path: '/tickets', label: 'Tickets', icon: Layers },
@@ -57,6 +58,7 @@ export default function MainLayout() {
     if (hasRole('EDITOR')) {
       return [
         ...base,
+        { path: '/forms', label: 'Forms', icon: FileText },
         { path: '/workflows', label: 'Workflows', icon: GitBranch },
         { path: '/tickets', label: 'Tickets', icon: Layers },
       ];
@@ -65,6 +67,7 @@ export default function MainLayout() {
     // VIEWER
     return [
       ...base,
+      { path: '/forms', label: 'Forms', icon: FileText },
       { path: '/workflows', label: 'Workflows được giao', icon: GitBranch },
       { path: '/tickets', label: 'Tickets', icon: Layers },
     ];

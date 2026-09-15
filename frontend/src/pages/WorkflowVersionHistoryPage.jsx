@@ -87,7 +87,7 @@ export default function WorkflowVersionHistoryPage() {
           <button type="button" onClick={() => navigate('/workflows')} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100"><ArrowLeft size={18} /></button>
           <div>
             <h1 className="text-lg font-bold text-slate-800">Lịch sử phiên bản — {workflow?.name || 'Workflow'}</h1>
-            <p className="mt-0.5 text-xs text-gray-400">Theo dõi, so sánh và kích hoạt lại các phiên bản thiết kế quy trình</p>
+            <p className="mt-0.5 text-xs text-gray-400">Theo dõi &amp; So sánh phiên bản</p>
           </div>
         </div>
         <div className="relative">
