@@ -4,3 +4,6 @@ test-results/
 .cache/
 dist/
 backend/target/
+test.md
+ui_helper_notes.csv
+workflow_requirement.pdf
