@@ -36,7 +36,6 @@ export default function MainLayout() {
     if (hasRole('ADMIN')) {
       return [
         ...base,
-        { path: '/forms', label: 'Forms', icon: FileText },
         { path: '/workflows', label: 'Workflows', icon: GitBranch },
         { path: '/forms', label: 'Forms', icon: FileText },
         { path: '/pipelines', label: 'Data Pipelines', icon: DatabaseZap },

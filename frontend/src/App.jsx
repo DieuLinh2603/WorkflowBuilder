@@ -18,7 +18,6 @@ import SettingsPage from './pages/SettingsPage';
 import ConnectorsPage from './pages/ConnectorsPage';
 import PipelinesPage from './pages/PipelinesPage';
 import PipelineDesignerPage from './pages/PipelineDesignerPage';
-import FormsPage from './pages/FormsPage';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
@@ -60,7 +59,6 @@ function App() {
         <Route path="catalog" element={<CatalogPage />} />
         <Route path="catalog/:workflowId" element={<RequestFormPage />} />
         <Route path="settings" element={<ProtectedRoute allowedRoles={['ADMIN']}><SettingsPage /></ProtectedRoute>} />
-        <Route path="forms" element={<ProtectedRoute allowedRoles={['ADMIN']}><FormsPage /></ProtectedRoute>} />
         <Route path="connectors" element={<ProtectedRoute allowedRoles={['ADMIN']}><ConnectorsPage /></ProtectedRoute>} />
         <Route path="pipelines" element={<ProtectedRoute allowedRoles={['ADMIN','WORKFLOW_OWNER']}><PipelinesPage /></ProtectedRoute>} />
         <Route path="pipelines/:id" element={<ProtectedRoute allowedRoles={['ADMIN','WORKFLOW_OWNER']}><PipelineDesignerPage /></ProtectedRoute>} />

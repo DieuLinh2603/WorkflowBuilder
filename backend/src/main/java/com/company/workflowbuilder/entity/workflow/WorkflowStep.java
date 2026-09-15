@@ -7,6 +7,11 @@ import org.hibernate.type.SqlTypes;
 
 import java.util.UUID;
 
+/**
+ * WorkflowStep — one node on the canvas.
+ * Each workflow starts with exactly one START step (auto-created).
+ * configJson stores step-specific configuration as JSONB.
+ */
 @Entity
 @Table(name = "workflow_steps")
 @Getter
@@ -30,15 +35,16 @@ public class WorkflowStep {
 
     private String label;
 
-    @Builder.Default
     @Column(name = "position_x")
+    @Builder.Default
     private int positionX = 0;
 
-    @Builder.Default
     @Column(name = "position_y")
+    @Builder.Default
     private int positionY = 0;
 
+    @Column(name = "config_json", nullable = false, columnDefinition = "jsonb")
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "config_json", columnDefinition = "jsonb")
-    private String configJson;
+    @Builder.Default
+    private String configJson = "{}";
 }

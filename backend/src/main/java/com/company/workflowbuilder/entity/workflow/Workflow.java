@@ -14,6 +14,11 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+/**
+ * Workflow entity — represents a workflow definition (design-time).
+ * Created by Admin or Workflow Owner.
+ * Always starts as DRAFT with version "1.0".
+ */
 @Entity
 @Table(name = "workflows")
 @Getter
@@ -33,11 +38,14 @@ public class Workflow {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    /** E.g. "Phê duyệt chi phí", "Nhân sự" */
     private String type;
 
+    /** User-provided label when type is CUSTOM. */
     @Column(name = "custom_type_name")
     private String customTypeName;
 
+    /** E.g. "Hành chính - Nhân sự", "Kinh doanh" */
     private String module;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -57,6 +65,7 @@ public class Workflow {
     @Builder.Default
     private WorkflowStatus status = WorkflowStatus.DRAFT;
 
+    /** Stable id shared by all immutable versions of one business workflow. */
     @Column(name = "family_id", nullable = false)
     private UUID familyId;
 
