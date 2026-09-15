@@ -7,6 +7,9 @@ import com.company.workflowbuilder.dto.response.BatchInstanceResponse;
 import com.company.workflowbuilder.dto.response.InstanceResponse;
 import com.company.workflowbuilder.entity.field.CustomFieldDefinition;
 import com.company.workflowbuilder.entity.field.FieldType;
+import com.company.workflowbuilder.entity.form.FormStatus;
+import com.company.workflowbuilder.entity.form.FormVersion;
+import com.company.workflowbuilder.entity.form.RequestForm;
 import com.company.workflowbuilder.entity.runtime.*;
 import com.company.workflowbuilder.entity.user.User;
 import com.company.workflowbuilder.entity.workflow.*;
@@ -119,7 +122,8 @@ class WorkflowEngineServiceTest {
         User actor = user("actor@company.com");
         authenticated.set(requester);
         Workflow workflow = Workflow.builder().id(UUID.randomUUID()).familyId(UUID.randomUUID()).name("End-to-end")
-                .version("1.0").status(WorkflowStatus.PUBLISHED).owner(requester).build();
+                .version("1.0").status(WorkflowStatus.PUBLISHED).owner(requester)
+                .formVersion(form("SINGLE", null, 500)).build();
 
         WorkflowStep start = step(workflow, StepType.START, "Start", "{}");
         WorkflowStep approval = step(workflow, StepType.APPROVAL, "Approval", actorConfig(actor, Map.of("mode", "MANUAL")));
@@ -193,7 +197,8 @@ class WorkflowEngineServiceTest {
         User requester = user("batch-owner@company.com");
         authenticated.set(requester);
         Workflow workflow = Workflow.builder().id(UUID.randomUUID()).familyId(UUID.randomUUID()).name("Batch flow")
-                .version("1.0").status(WorkflowStatus.PUBLISHED).owner(requester).build();
+                .version("1.0").status(WorkflowStatus.PUBLISHED).owner(requester)
+                .formVersion(form("BATCH", null, 10)).build();
         WorkflowStep start = step(workflow, StepType.START, "Start",
                 mapper.writeValueAsString(Map.of("submissionMode", "BATCH", "maxBatchRows", 10)));
         WorkflowStep end = step(workflow, StepType.END, "End",
@@ -225,7 +230,8 @@ class WorkflowEngineServiceTest {
         User requester = user("batch-requester@company.com"), reviewer = user("batch-reviewer@company.com");
         authenticated.set(requester);
         Workflow workflow = Workflow.builder().id(UUID.randomUUID()).familyId(UUID.randomUUID()).name("Batch review")
-                .version("1.0").status(WorkflowStatus.PUBLISHED).owner(requester).build();
+                .version("1.0").status(WorkflowStatus.PUBLISHED).owner(requester)
+                .formVersion(form("BATCH", null, 10)).build();
         WorkflowStep start = step(workflow, StepType.START, "Start",
                 mapper.writeValueAsString(Map.of("submissionMode", "BATCH", "maxBatchRows", 10)));
         WorkflowStep review = step(workflow, StepType.REVIEW, "Review",
@@ -291,7 +297,8 @@ class WorkflowEngineServiceTest {
         User requester = user("batch-owner-scope@company.com"), owner = user("workflow-owner@company.com");
         User firstRecipient = user("first-recipient@company.com"), secondRecipient = user("second-recipient@company.com");
         Workflow workflow = Workflow.builder().id(UUID.randomUUID()).familyId(UUID.randomUUID()).name("Scoped batch")
-                .version("1.0").status(WorkflowStatus.PUBLISHED).owner(owner).build();
+                .version("1.0").status(WorkflowStatus.PUBLISHED).owner(owner)
+                .formVersion(form("BATCH", "recipient", 500)).build();
         WorkflowStep start = step(workflow, StepType.START, "Start",
                 mapper.writeValueAsString(Map.of("submissionMode", "BATCH", "recordRecipientFieldKey", "recipient")));
         List<Map<String, Object>> rows = List.of(
@@ -322,7 +329,7 @@ class WorkflowEngineServiceTest {
     @Test
     void reviewNotPassedCompletesTaskAndRejectsInstanceWhenNoRejectBranch() throws Exception {
         User requester=user("requester-review@company.com"),reviewer=user("reviewer@company.com");authenticated.set(requester);
-        Workflow workflow=Workflow.builder().id(UUID.randomUUID()).familyId(UUID.randomUUID()).name("Review flow").version("1.0").status(WorkflowStatus.PUBLISHED).owner(requester).build();
+        Workflow workflow=Workflow.builder().id(UUID.randomUUID()).familyId(UUID.randomUUID()).name("Review flow").version("1.0").status(WorkflowStatus.PUBLISHED).owner(requester).formVersion(form("SINGLE",null,500)).build();
         WorkflowStep start=step(workflow,StepType.START,"Start","{}");
         WorkflowStep review=step(workflow,StepType.REVIEW,"Review",actorConfig(reviewer,Map.of("mode","MANUAL","commentRequired",true,"resultMode","REQUIRE_APPROVAL")));
         WorkflowStep end=step(workflow,StepType.END,"End",mapper.writeValueAsString(Map.of("outcome","COMPLETED")));
@@ -350,7 +357,8 @@ class WorkflowEngineServiceTest {
     void reviewNotPassedFollowsConfiguredFailureBranch() throws Exception {
         User requester=user("requester-review-route@company.com"),reviewer=user("reviewer-route@company.com");authenticated.set(requester);
         Workflow workflow=Workflow.builder().id(UUID.randomUUID()).familyId(UUID.randomUUID()).name("Review correction flow")
-                .version("1.0").status(WorkflowStatus.PUBLISHED).owner(requester).build();
+                .version("1.0").status(WorkflowStatus.PUBLISHED).owner(requester)
+                .formVersion(form("SINGLE", null, 500)).build();
         WorkflowStep start=step(workflow,StepType.START,"Start","{}");
         WorkflowStep review=step(workflow,StepType.REVIEW,"Review",actorConfig(reviewer,Map.of("mode","MANUAL","commentRequired",true,"resultMode","REQUIRE_APPROVAL")));
         WorkflowStep correction=step(workflow,StepType.ASSIGNMENT,"Correct data",actorConfig(reviewer,Map.of("completionMode","ANY")));
@@ -381,7 +389,7 @@ class WorkflowEngineServiceTest {
         authenticated.set(requester);
         Workflow workflow = Workflow.builder().id(UUID.randomUUID()).familyId(UUID.randomUUID())
                 .name("Approval correction flow").version("1.0").status(WorkflowStatus.PUBLISHED)
-                .owner(requester).build();
+                .owner(requester).formVersion(form("SINGLE", null, 500)).build();
         WorkflowStep start = step(workflow, StepType.START, "Start", "{}");
         WorkflowStep correction = step(workflow, StepType.ASSIGNMENT, "Bổ sung hồ sơ",
                 actorConfig(actor, Map.of("completionMode", "ANY")));
@@ -535,6 +543,14 @@ class WorkflowEngineServiceTest {
 
     private User user(String email){return User.builder().id(UUID.randomUUID()).email(email).passwordHash("x").displayName(email).active(true).build();}
     private WorkflowStep step(Workflow workflow,StepType type,String label,String config){return WorkflowStep.builder().id(UUID.randomUUID()).workflow(workflow).type(type).label(label).configJson(config).build();}
+
+    private FormVersion form(String submissionMode, String recipientFieldKey, int maxBatchRows) {
+        RequestForm requestForm = RequestForm.builder().id(UUID.randomUUID()).name("Test form").build();
+        return FormVersion.builder().id(UUID.randomUUID()).versionNumber(1).status(FormStatus.PUBLISHED)
+                .form(requestForm)
+                .submissionMode(submissionMode).recordRecipientFieldKey(recipientFieldKey)
+                .maxBatchRows(maxBatchRows).build();
+    }
     private String actorConfig(User actor,Map<String,Object> extra) throws Exception {Map<String,Object> value=new HashMap<>(extra);value.put("approverMode","FIXED_USER");value.put("actorUserIds",List.of(actor.getId().toString()));return mapper.writeValueAsString(value);}
     private WorkflowConnection connection(Workflow workflow,WorkflowStep from,WorkflowStep to,ConnectionType type){return WorkflowConnection.builder().id(UUID.randomUUID()).workflow(workflow).fromStep(from).toStep(to).type(type).build();}
 }
